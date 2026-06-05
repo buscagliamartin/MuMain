@@ -50,6 +50,13 @@ namespace MUHelper
 		PET_ATTACK_TOGETHER = 0x02
 	};
 
+	enum EAttackMode : BYTE
+	{
+		ATTACK_MODE_SKILL = 0x00,
+		ATTACK_MODE_BUFFS = 0x01,
+		ATTACK_MODE_BASIC = 0x02
+	};
+
 	typedef struct _PetAttackConfig
 	{
 		int iHuntingRange = 0;
@@ -84,6 +91,7 @@ namespace MUHelper
 		int iDarkRavenMode = 0;
 
 		bool bRepairItem = false;
+		int iAttackMode = ATTACK_MODE_SKILL;
 
 		int iObtainingRange = 0;
 		bool bPickAllItems = false;
@@ -104,7 +112,7 @@ namespace MUHelper
 		bool bUseSelfDefense = false;
 		bool bAutoAcceptFriend = false;
 		bool bAutoAcceptGuild = false;
-		bool bFallbackBasicAttack = true;
+		bool bFallbackBasicAttack = false;
 	} ConfigData;
 
 	class ConfigDataSerDe {

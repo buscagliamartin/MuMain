@@ -3670,17 +3670,23 @@ typedef struct
     BYTE PickAllNearItems : 1;
     BYTE PickSelectedItems : 1;
     BYTE PetAttack;                          // Index: 32
-    
-    BYTE bUseSelfDefense : 1;                // Index: 33 (bit 0)
-    BYTE bAutoAcceptFriend : 1;              // Index: 33 (bit 1)
-    BYTE bAutoAcceptGuild : 1;               // Index: 33 (bit 2)
-    BYTE bFallbackBasicAttack : 1;           // Index: 33 (bit 3)
-    BYTE : 4;                                // Unused bits of Index 33
+    BYTE ServerMode;                         // Index: 33, blob offset 29: 0 attack, 1 buff, 2 basic attack
 
-    BYTE _UnusedPadding[35];                 // Index: 34 (35 bytes remaining)
+    BYTE bUseSelfDefense : 1;                // Index: 34 (bit 0), client-local
+    BYTE bAutoAcceptFriend : 1;              // Index: 34 (bit 1), client-local
+    BYTE bAutoAcceptGuild : 1;               // Index: 34 (bit 2), client-local
+    BYTE bFallbackBasicAttack : 1;           // Index: 34 (bit 3), deprecated client-local
+    BYTE : 4;                                // Unused bits of Index 34
+
+    BYTE _UnusedPadding[34];                 // Index: 35, keeps ExtraItems at blob offset 65
     char ExtraItems[12][15];                 // Index: 69
+    BYTE _TrailingPadding[12];               // Keeps the raw helper blob at 257 bytes
 } PRECEIVE_MUHELPER_DATA, * LPRECEIVE_MUHELPER_DATA;
 #pragma pack(pop)
+
+static_assert(offsetof(PRECEIVE_MUHELPER_DATA, ServerMode) == 29, "Mu Helper mode byte must stay at blob offset 29.");
+static_assert(offsetof(PRECEIVE_MUHELPER_DATA, ExtraItems) == 65, "Mu Helper extra item filters must stay at blob offset 65.");
+static_assert(sizeof(PRECEIVE_MUHELPER_DATA) == 257, "Mu Helper settings blob must stay 257 bytes.");
 
 #pragma pack(push, 1)
 typedef struct
