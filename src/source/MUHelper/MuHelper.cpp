@@ -975,6 +975,21 @@ namespace MUHelper
 
         const int iPreviousSelectedCharacter = SelectedCharacter;
         const int iPreviousActionTarget = ActionTarget;
+        const int iPreviousTargetX = TargetX;
+        const int iPreviousTargetY = TargetY;
+        const int iPreviousAttacking = Attacking;
+        const auto previousMovementType = Hero->MovementType;
+        const MovementSkill previousMovementSkill = g_MovementSkill;
+        const auto restoreActionState = [&]()
+        {
+            SelectedCharacter = iPreviousSelectedCharacter;
+            ActionTarget = iPreviousActionTarget;
+            TargetX = iPreviousTargetX;
+            TargetY = iPreviousTargetY;
+            Attacking = iPreviousAttacking;
+            Hero->MovementType = previousMovementType;
+            g_MovementSkill = previousMovementSkill;
+        };
 
         SelectedCharacter = iCharIndex;
         TargetX = static_cast<int>(pTarget->Object.Position[0] / TERRAIN_SCALE);
@@ -985,8 +1000,7 @@ namespace MUHelper
         if (!bTargetNear || !bNoWall)
         {
             m_iCurrentTarget = -1;
-            SelectedCharacter = iPreviousSelectedCharacter;
-            ActionTarget = iPreviousActionTarget;
+            restoreActionState();
             return 0;
         }
 
@@ -999,8 +1013,7 @@ namespace MUHelper
 
         Action(Hero, &Hero->Object, true);
 
-        SelectedCharacter = iPreviousSelectedCharacter;
-        ActionTarget = iPreviousActionTarget;
+        restoreActionState();
 
         return 1;
     }
