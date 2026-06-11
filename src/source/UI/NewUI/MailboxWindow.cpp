@@ -336,6 +336,11 @@ void CNewUIMailbox::Toggle()
         return;
     }
 
+    if (g_pNewUIAuctionHouse && g_pNewUIAuctionHouse->IsVisible())
+    {
+        g_pNewUISystem->Hide(INTERFACE_AUCTIONHOUSE);
+    }
+
     Show(true);
     RequestMailbox();
 }

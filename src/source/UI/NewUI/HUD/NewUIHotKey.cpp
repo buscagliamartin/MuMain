@@ -374,6 +374,16 @@ bool SEASON3B::CNewUIHotKey::UpdateKeyEvent()
         }
         return false;
     }
+    else if (SEASON3B::IsPress('S'))
+    {
+        // BarnaMu Auction House. Opens the standalone market window and requests the browse view.
+        if (g_pNewUIAuctionHouse)
+        {
+            g_pNewUIAuctionHouse->Toggle();
+            PlayBuffer(SOUND_CLICK01);
+        }
+        return false;
+    }
     return true;
 }
 

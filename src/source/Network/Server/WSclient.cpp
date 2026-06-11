@@ -13161,11 +13161,9 @@ void ReceiveJewelBankBalances(std::span<const BYTE> ReceiveBuffer)
     g_ConsoleDebug->Write(MCD_RECEIVE, L"0xBF [0x30] [ReceiveJewelBankBalances]");
 }
 
-// BarnaMu: Auction House / Mailbox UI packets (0xBF, sub-code 0x31). Client Feature Bundle Step 2
-// ports the MAILBOX receiver only: it decodes the shared Auction-House packet for the mailbox view
-// (view 2) and routes it to the Mailbox window. The auction-listing views (handled by the Auction
-// House UI) are intentionally left unwired until that UI is ported in a later step. Ops: 0 = page
-// header, 1 = one row entry, 2 = status message, 3 = Postman NPC "open mailbox" trigger.
+// BarnaMu: Auction House / Mailbox UI packets (0xBF, sub-code 0x31). View 2 is shared by the
+// standalone Mailbox and Auction House "Bought" tab, so the currently visible window owns it. Ops:
+// 0 = page header, 1 = one row entry, 2 = status message, 3 = Postman NPC "open mailbox" trigger.
 void ReceiveAuctionHousePacket(std::span<const BYTE> ReceiveBuffer)
 {
     if (ReceiveBuffer.size() < 5)
@@ -13179,9 +13177,14 @@ void ReceiveAuctionHousePacket(std::span<const BYTE> ReceiveBuffer)
     if (op == 0 && ReceiveBuffer.size() >= 8)
     {
         const BYTE view = ReceiveBuffer[5];
-        if (view == MAILBOX_VIEW && g_pNewUIMailbox != NULL)
+        const bool auctionHouseVisible = g_pNewUIAuctionHouse != NULL && g_pNewUIAuctionHouse->IsVisible();
+        if (view == MAILBOX_VIEW && g_pNewUIMailbox != NULL && auctionHouseVisible == false)
         {
             g_pNewUIMailbox->SetMailboxHeader(view, ReceiveBuffer[6], ReceiveBuffer[7]);
+        }
+        else if (g_pNewUIAuctionHouse != NULL)
+        {
+            g_pNewUIAuctionHouse->SetListingsHeader(view, ReceiveBuffer[6], ReceiveBuffer[7]);
         }
     }
     else if (op == 3)
@@ -13222,7 +13225,8 @@ void ReceiveAuctionHousePacket(std::span<const BYTE> ReceiveBuffer)
             ReadAuctionUtf8(&receiveBuffer[OptionalPayloadOffset], availableSummaryLength, summary, SummaryLength);
         };
         const BYTE view = ReceiveBuffer[5];
-        if (view == MAILBOX_VIEW && g_pNewUIMailbox != NULL)
+        const bool auctionHouseVisible = g_pNewUIAuctionHouse != NULL && g_pNewUIAuctionHouse->IsVisible();
+        if (view == MAILBOX_VIEW && g_pNewUIMailbox != NULL && auctionHouseVisible == false)
         {
             SEASON3B::CNewUIMailbox::EntryView entry = {};
             entry.Status = ReceiveBuffer[6];
@@ -13237,6 +13241,20 @@ void ReceiveAuctionHousePacket(std::span<const BYTE> ReceiveBuffer)
             readOptionalItemPayload(ReceiveBuffer, entry.ItemData, entry.ItemDataLength, entry.ItemSummary);
             g_pNewUIMailbox->AddMailboxEntry(entry);
         }
+        else if (g_pNewUIAuctionHouse != NULL)
+        {
+            SEASON3B::CNewUIAuctionHouse::ListingView listing = {};
+            listing.Status = ReceiveBuffer[6];
+            listing.Currency = ReceiveBuffer[7];
+            listing.ListingNumber = ReadAuctionUInt32(&ReceiveBuffer[8]);
+            listing.ItemType = ReadAuctionUInt16(&ReceiveBuffer[12]);
+            listing.ItemLevel = ReceiveBuffer[14];
+            listing.Price = ReadAuctionUInt32(&ReceiveBuffer[15]);
+            ReadAuctionUtf8(&ReceiveBuffer[19], 48, listing.ItemName, 48);
+            ReadAuctionUtf8(&ReceiveBuffer[67], 12, listing.SellerName, 12);
+            listing.JewelSlot = ReceiveBuffer[79];
+            g_pNewUIAuctionHouse->AddListing(listing);
+        }
     }
     else if (op == 2 && ReceiveBuffer.size() > 5)
     {
@@ -13247,9 +13265,13 @@ void ReceiveAuctionHousePacket(std::span<const BYTE> ReceiveBuffer)
         {
             g_pNewUIMailbox->SetStatusMessage(message);
         }
+        if (g_pNewUIAuctionHouse != NULL)
+        {
+            g_pNewUIAuctionHouse->SetStatusMessage(message);
+        }
     }
 
-    g_ConsoleDebug->Write(MCD_RECEIVE, L"0xBF [0x31] [ReceiveAuctionHousePacket mailbox]");
+    g_ConsoleDebug->Write(MCD_RECEIVE, L"0xBF [0x31] [ReceiveAuctionHousePacket]");
 }
 
 // BarnaMu Duel Ladder hub response (server 0xBF / sub 0x32). Decodes the already-merged

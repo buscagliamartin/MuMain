@@ -117,6 +117,7 @@ CNewUISystem::CNewUISystem()
     m_pNewGensRanking = nullptr;
 #endif //PBG_ADD_GENSRANKING
     m_pNewUnitedMarketPlaceWindow = nullptr;
+    m_pNewUIAuctionHouse = nullptr;
 }
 
 CNewUISystem::~CNewUISystem()
@@ -534,6 +535,10 @@ bool CNewUISystem::LoadMainSceneInterface()
 
     m_pNewUIJewelBank = new CNewUIJewelBank;
     if (m_pNewUIJewelBank->Create(m_pNewUIMng, m_pNewUI3DRenderMng, 0, 0) == false)
+        return false;
+
+    m_pNewUIAuctionHouse = new CNewUIAuctionHouse;
+    if (m_pNewUIAuctionHouse->Create(m_pNewUIMng, m_pNewUI3DRenderMng, 0, 0) == false)
         return false;
 
     return true;
@@ -2464,4 +2469,9 @@ CNewUIMailbox* CNewUISystem::Get_pNewUIMailbox() const
 CNewUIJewelBank* CNewUISystem::Get_pNewUIJewelBank() const
 {
     return m_pNewUIJewelBank;
+}
+
+CNewUIAuctionHouse* CNewUISystem::Get_pNewUIAuctionHouse() const
+{
+    return m_pNewUIAuctionHouse;
 }
