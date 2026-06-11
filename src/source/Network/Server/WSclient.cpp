@@ -13095,6 +13095,164 @@ void ReceiveDarkside(const BYTE* ReceiveBuffer)
     }
 }
 
+// BarnaMu Duel Ladder hub response (server 0xBF / sub 0x32). Decodes the already-merged
+// server contract into the client window. op 0 = top list (23-byte rows), op 1 = my profile,
+// op 2 = waiting-to-fight (21-byte rows), op 3 = match history (22-byte rows), op 4 = hall of
+// fame (26-byte rows), op 5 = top-guild names (10-byte rows, matched to op-0 rows by index).
+// Guards a missing/short buffer and a not-yet-created window; never throws.
+void ReceiveDuelLadderResponse(std::span<const BYTE> ReceiveBuffer)
+{
+    if (ReceiveBuffer.size() < 5 || g_pNewUIDuelLadder == nullptr)
+    {
+        return;
+    }
+
+    BYTE op = ReceiveBuffer[4];
+    if (op == 0)
+    {
+        if (ReceiveBuffer.size() < 7)
+        {
+            return;
+        }
+
+        BYTE bracket = ReceiveBuffer[5];
+        BYTE count = ReceiveBuffer[6];
+        if (count > 10)
+        {
+            count = 10;
+        }
+
+        const size_t needed = 7 + (size_t)count * 23;
+        if (ReceiveBuffer.size() < needed)
+        {
+            return;
+        }
+
+        g_pNewUIDuelLadder->SetTopData(bracket, count, ReceiveBuffer.data() + 7, (int)(count * 23));
+    }
+    else if (op == 1)
+    {
+        if (ReceiveBuffer.size() < 21)
+        {
+            return;
+        }
+
+        BYTE bracket = ReceiveBuffer[5];
+        BYTE tier = ReceiveBuffer[6];
+        unsigned int rating = (unsigned int)ReceiveBuffer[7]
+            | ((unsigned int)ReceiveBuffer[8] << 8)
+            | ((unsigned int)ReceiveBuffer[9] << 16)
+            | ((unsigned int)ReceiveBuffer[10] << 24);
+        unsigned int wins = (unsigned int)ReceiveBuffer[11]
+            | ((unsigned int)ReceiveBuffer[12] << 8)
+            | ((unsigned int)ReceiveBuffer[13] << 16)
+            | ((unsigned int)ReceiveBuffer[14] << 24);
+        unsigned int losses = (unsigned int)ReceiveBuffer[15]
+            | ((unsigned int)ReceiveBuffer[16] << 8)
+            | ((unsigned int)ReceiveBuffer[17] << 16)
+            | ((unsigned int)ReceiveBuffer[18] << 24);
+        unsigned short rank = (unsigned short)ReceiveBuffer[19]
+            | ((unsigned short)ReceiveBuffer[20] << 8);
+
+        g_pNewUIDuelLadder->SetProfileData(bracket, tier, rating, wins, losses, rank);
+    }
+    else if (op == 2)
+    {
+        // Waiting-to-fight list: [5]=selfListed, [6]=count, then count x 21-byte entries
+        // (name[10]+class[1]+rating[4]+tier[1]+bracket[1]+waitSeconds[4]).
+        if (ReceiveBuffer.size() < 7)
+        {
+            return;
+        }
+
+        BYTE selfListed = ReceiveBuffer[5];
+        BYTE count = ReceiveBuffer[6];
+        if (count > 32)
+        {
+            count = 32;
+        }
+
+        const size_t needed = 7 + (size_t)count * 21;
+        if (ReceiveBuffer.size() < needed)
+        {
+            return;
+        }
+
+        g_pNewUIDuelLadder->SetWaitingData(selfListed, count, ReceiveBuffer.data() + 7, (int)(count * 21));
+    }
+    else if (op == 3)
+    {
+        // Match history: [5]=count, then count x 22-byte entries
+        // (opponent[10]+result[1]+myScore[1]+oppScore[1]+ratingChange[4]+bracket[1]+secondsAgo[4]).
+        if (ReceiveBuffer.size() < 6)
+        {
+            return;
+        }
+
+        BYTE count = ReceiveBuffer[5];
+        if (count > 50)
+        {
+            count = 50;
+        }
+
+        const size_t needed = 6 + (size_t)count * 22;
+        if (ReceiveBuffer.size() < needed)
+        {
+            return;
+        }
+
+        g_pNewUIDuelLadder->SetHistoryData(count, ReceiveBuffer.data() + 6, (int)(count * 22));
+    }
+    else if (op == 4)
+    {
+        // Hall of fame: [5]=count, then count x 26-byte entries
+        // (season[1]+bracket[1]+rank[1]+name[10]+class[1]+rating[4]+wins[4]+losses[4]).
+        if (ReceiveBuffer.size() < 6)
+        {
+            return;
+        }
+
+        BYTE count = ReceiveBuffer[5];
+        if (count > 50)
+        {
+            count = 50;
+        }
+
+        const size_t needed = 6 + (size_t)count * 26;
+        if (ReceiveBuffer.size() < needed)
+        {
+            return;
+        }
+
+        g_pNewUIDuelLadder->SetHallOfFameData(count, ReceiveBuffer.data() + 6, (int)(count * 26));
+    }
+    else if (op == 5)
+    {
+        // Top guild names: [5]=bracket, [6]=count, then count x 10-byte guild names (matched to the
+        // op-0 ranking rows by index). Sent separately so the op-0 packet stays within its length.
+        if (ReceiveBuffer.size() < 7)
+        {
+            return;
+        }
+
+        BYTE count = ReceiveBuffer[6];
+        if (count > 10)
+        {
+            count = 10;
+        }
+
+        const size_t needed = 7 + (size_t)count * 10;
+        if (ReceiveBuffer.size() < needed)
+        {
+            return;
+        }
+
+        g_pNewUIDuelLadder->SetTopGuilds(count, ReceiveBuffer.data() + 7, (int)(count * 10));
+    }
+
+    g_ConsoleDebug->Write(MCD_RECEIVE, L"0xBF [0x32] [ReceiveDuelLadderResponse op=%u]", op);
+}
+
 static void ProcessPacket(const BYTE* ReceiveBuffer, int32_t Size)
 {
     auto received_span = std::span<const BYTE>(ReceiveBuffer, Size);
@@ -14486,6 +14644,9 @@ static void ProcessPacket(const BYTE* ReceiveBuffer, int32_t Size)
 #endif //LJH_ADD_SYSTEM_OF_EQUIPPING_ITEM_FROM_INVENTORY
         case 0x51:
             ReceiveMuHelperStatusUpdate(received_span);
+            break;
+        case 0x32:
+            ReceiveDuelLadderResponse(received_span);
             break;
         }
     }

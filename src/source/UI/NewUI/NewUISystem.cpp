@@ -524,6 +524,10 @@ bool CNewUISystem::LoadMainSceneInterface()
     if (m_pNewUIMuHelperSkillList->Create(m_pNewUIMng, m_pNewUI3DRenderMng) == false)
         return false;
 
+    m_pNewUIDuelLadder = new CNewUIDuelLadder;
+    if (m_pNewUIDuelLadder->Create(m_pNewUIMng, (640 - CNewUIDuelLadder::WINDOW_WIDTH) / 2, 36) == false)
+        return false;
+
     return true;
 }
 
@@ -2437,4 +2441,9 @@ CNewUIMuHelperExt* CNewUISystem::Get_pNewUIMuHelperExt() const
 CNewUIMuHelperSkillList* CNewUISystem::Get_pNewUIMuHelperSkillList() const
 {
     return m_pNewUIMuHelperSkillList;
+}
+
+CNewUIDuelLadder* CNewUISystem::Get_pNewUIDuelLadder() const
+{
+    return m_pNewUIDuelLadder;
 }
