@@ -83,6 +83,7 @@
 #include "UI/NewUI/Inventory/NewUILuckyItemWnd.h"
 #include "UI/NewUI/NewUIMuHelper.h"
 #include "UI/NewUI/DuelLadderWindow.h"
+#include "UI/NewUI/MailboxWindow.h"
 
 namespace SEASON3B
 {
@@ -221,6 +222,7 @@ namespace SEASON3B
         CNewUIMuHelperExt* m_pNewUIMuHelperExt;
         CNewUIMuHelperSkillList* m_pNewUIMuHelperSkillList;
         CNewUIDuelLadder* m_pNewUIDuelLadder;
+        CNewUIMailbox* m_pNewUIMailbox;
     public:
         CNewUIChatInputBox* GetUI_NewChatInputBox() const;
         CNewUIChatLogWindow* GetUI_NewChatLogWindow() const;
@@ -303,6 +305,7 @@ namespace SEASON3B
         CNewUIMuHelperExt* Get_pNewUIMuHelperExt() const;
         CNewUIMuHelperSkillList* Get_pNewUIMuHelperSkillList() const;
         CNewUIDuelLadder* Get_pNewUIDuelLadder() const;
+        CNewUIMailbox* Get_pNewUIMailbox() const;
     };
 }
 
@@ -392,4 +395,5 @@ namespace SEASON3B
 #define g_pNewUIMuHelperExt SEASON3B::CNewUISystem::GetInstance()->Get_pNewUIMuHelperExt()
 #define g_pNewUIMuHelperSkillList SEASON3B::CNewUISystem::GetInstance()->Get_pNewUIMuHelperSkillList()
 #define g_pNewUIDuelLadder SEASON3B::CNewUISystem::GetInstance()->Get_pNewUIDuelLadder()
+#define g_pNewUIMailbox SEASON3B::CNewUISystem::GetInstance()->Get_pNewUIMailbox()
 #endif // _NEWUISYSTEM_H_

@@ -13095,6 +13095,136 @@ void ReceiveDarkside(const BYTE* ReceiveBuffer)
     }
 }
 
+namespace
+{
+    unsigned int ReadAuctionUInt32(const BYTE* data)
+    {
+        return static_cast<unsigned int>(data[0])
+            | (static_cast<unsigned int>(data[1]) << 8)
+            | (static_cast<unsigned int>(data[2]) << 16)
+            | (static_cast<unsigned int>(data[3]) << 24);
+    }
+
+    unsigned short ReadAuctionUInt16(const BYTE* data)
+    {
+        return static_cast<unsigned short>(data[0] | (data[1] << 8));
+    }
+
+    void ReadAuctionUtf8(const BYTE* source, int sourceLength, wchar_t* target, int targetLength)
+    {
+        if (target == NULL || targetLength <= 0)
+        {
+            return;
+        }
+
+        target[0] = L'\0';
+        int length = 0;
+        while (length < sourceLength && source[length] != 0)
+        {
+            length++;
+        }
+
+        if (length == 0)
+        {
+            return;
+        }
+
+        const int written = MultiByteToWideChar(CP_UTF8, 0, reinterpret_cast<const char*>(source), length, target, targetLength - 1);
+        target[written >= 0 ? written : 0] = L'\0';
+    }
+}
+
+// BarnaMu: Auction House / Mailbox UI packets (0xBF, sub-code 0x31). Client Feature Bundle Step 2
+// ports the MAILBOX receiver only: it decodes the shared Auction-House packet for the mailbox view
+// (view 2) and routes it to the Mailbox window. The auction-listing views (handled by the Auction
+// House UI) are intentionally left unwired until that UI is ported in a later step. Ops: 0 = page
+// header, 1 = one row entry, 2 = status message, 3 = Postman NPC "open mailbox" trigger.
+void ReceiveAuctionHousePacket(std::span<const BYTE> ReceiveBuffer)
+{
+    if (ReceiveBuffer.size() < 5)
+    {
+        return;
+    }
+
+    constexpr BYTE MAILBOX_VIEW = 2;
+
+    const BYTE op = ReceiveBuffer[4];
+    if (op == 0 && ReceiveBuffer.size() >= 8)
+    {
+        const BYTE view = ReceiveBuffer[5];
+        if (view == MAILBOX_VIEW && g_pNewUIMailbox != NULL)
+        {
+            g_pNewUIMailbox->SetMailboxHeader(view, ReceiveBuffer[6], ReceiveBuffer[7]);
+        }
+    }
+    else if (op == 3)
+    {
+        // BarnaMu: the Postman NPC (Lorencia) asked us to open the Mailbox window. Open it only if
+        // it isn't already up; opening it triggers the window's own request for its contents.
+        if (g_pNewUIMailbox != NULL && g_pNewUIMailbox->IsVisible() == false)
+        {
+            g_pNewUIMailbox->Toggle();
+        }
+    }
+    else if (op == 1 && ReceiveBuffer.size() >= 80)
+    {
+        auto readOptionalItemPayload = [](std::span<const BYTE> receiveBuffer, BYTE* itemData, BYTE& itemDataLength, wchar_t* summary)
+        {
+            constexpr int OptionalPayloadOffset = 80;
+            constexpr int SummaryLength = 256;
+            constexpr int MaxAuctionItemDataLength = 15;
+            itemDataLength = 0;
+            if (receiveBuffer.size() <= OptionalPayloadOffset)
+            {
+                return;
+            }
+
+            const BYTE declaredLength = receiveBuffer[OptionalPayloadOffset];
+            if (declaredLength <= MaxAuctionItemDataLength
+                && receiveBuffer.size() >= static_cast<size_t>(OptionalPayloadOffset + 1 + declaredLength))
+            {
+                itemDataLength = declaredLength;
+                if (declaredLength > 0)
+                {
+                    memcpy(itemData, &receiveBuffer[OptionalPayloadOffset + 1], declaredLength);
+                }
+                return;
+            }
+
+            const int availableSummaryLength = std::min<int>(SummaryLength, static_cast<int>(receiveBuffer.size()) - OptionalPayloadOffset);
+            ReadAuctionUtf8(&receiveBuffer[OptionalPayloadOffset], availableSummaryLength, summary, SummaryLength);
+        };
+        const BYTE view = ReceiveBuffer[5];
+        if (view == MAILBOX_VIEW && g_pNewUIMailbox != NULL)
+        {
+            SEASON3B::CNewUIMailbox::EntryView entry = {};
+            entry.Status = ReceiveBuffer[6];
+            entry.Currency = ReceiveBuffer[7];
+            entry.EntryNumber = ReadAuctionUInt32(&ReceiveBuffer[8]);
+            entry.ItemType = ReadAuctionUInt16(&ReceiveBuffer[12]);
+            entry.ItemLevel = ReceiveBuffer[14];
+            entry.Amount = ReadAuctionUInt32(&ReceiveBuffer[15]);
+            ReadAuctionUtf8(&ReceiveBuffer[19], 48, entry.ItemName, 48);
+            ReadAuctionUtf8(&ReceiveBuffer[67], 12, entry.SourceName, 12);
+            entry.JewelSlot = ReceiveBuffer[79];
+            readOptionalItemPayload(ReceiveBuffer, entry.ItemData, entry.ItemDataLength, entry.ItemSummary);
+            g_pNewUIMailbox->AddMailboxEntry(entry);
+        }
+    }
+    else if (op == 2 && ReceiveBuffer.size() > 5)
+    {
+        wchar_t message[128] = { 0 };
+        ReadAuctionUtf8(&ReceiveBuffer[5], static_cast<int>(ReceiveBuffer.size() - 5), message, 128);
+
+        if (g_pNewUIMailbox != NULL)
+        {
+            g_pNewUIMailbox->SetStatusMessage(message);
+        }
+    }
+
+    g_ConsoleDebug->Write(MCD_RECEIVE, L"0xBF [0x31] [ReceiveAuctionHousePacket mailbox]");
+}
+
 // BarnaMu Duel Ladder hub response (server 0xBF / sub 0x32). Decodes the already-merged
 // server contract into the client window. op 0 = top list (23-byte rows), op 1 = my profile,
 // op 2 = waiting-to-fight (21-byte rows), op 3 = match history (22-byte rows), op 4 = hall of
@@ -14647,6 +14777,9 @@ static void ProcessPacket(const BYTE* ReceiveBuffer, int32_t Size)
             break;
         case 0x32:
             ReceiveDuelLadderResponse(received_span);
+            break;
+        case 0x31:
+            ReceiveAuctionHousePacket(received_span);
             break;
         }
     }

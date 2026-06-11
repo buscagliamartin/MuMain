@@ -528,6 +528,10 @@ bool CNewUISystem::LoadMainSceneInterface()
     if (m_pNewUIDuelLadder->Create(m_pNewUIMng, (640 - CNewUIDuelLadder::WINDOW_WIDTH) / 2, 36) == false)
         return false;
 
+    m_pNewUIMailbox = new CNewUIMailbox;
+    if (m_pNewUIMailbox->Create(m_pNewUIMng, m_pNewUI3DRenderMng, (640 - CNewUIMailbox::WINDOW_WIDTH) / 2, 10) == false)
+        return false;
+
     return true;
 }
 
@@ -2446,4 +2450,9 @@ CNewUIMuHelperSkillList* CNewUISystem::Get_pNewUIMuHelperSkillList() const
 CNewUIDuelLadder* CNewUISystem::Get_pNewUIDuelLadder() const
 {
     return m_pNewUIDuelLadder;
+}
+
+CNewUIMailbox* CNewUISystem::Get_pNewUIMailbox() const
+{
+    return m_pNewUIMailbox;
 }
