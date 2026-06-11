@@ -532,6 +532,10 @@ bool CNewUISystem::LoadMainSceneInterface()
     if (m_pNewUIMailbox->Create(m_pNewUIMng, m_pNewUI3DRenderMng, (640 - CNewUIMailbox::WINDOW_WIDTH) / 2, 10) == false)
         return false;
 
+    m_pNewUIJewelBank = new CNewUIJewelBank;
+    if (m_pNewUIJewelBank->Create(m_pNewUIMng, m_pNewUI3DRenderMng, 0, 0) == false)
+        return false;
+
     return true;
 }
 
@@ -2455,4 +2459,9 @@ CNewUIDuelLadder* CNewUISystem::Get_pNewUIDuelLadder() const
 CNewUIMailbox* CNewUISystem::Get_pNewUIMailbox() const
 {
     return m_pNewUIMailbox;
+}
+
+CNewUIJewelBank* CNewUISystem::Get_pNewUIJewelBank() const
+{
+    return m_pNewUIJewelBank;
 }

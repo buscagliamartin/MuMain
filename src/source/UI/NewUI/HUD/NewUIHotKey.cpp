@@ -362,6 +362,18 @@ bool SEASON3B::CNewUIHotKey::UpdateKeyEvent()
         }
         return false;
     }
+    else if (SEASON3B::IsPress('J'))
+    {
+        // BarnaMu Jewel Bank. In the reference it opened from the MU Helper menu; clean keeps the
+        // MuHelper foundation untouched, so the window is opened with this isolated hotkey instead.
+        // Toggle() queries balances from the already-merged server (0xBF/0x30) when it opens.
+        if (g_pNewUIJewelBank)
+        {
+            g_pNewUIJewelBank->Toggle();
+            PlayBuffer(SOUND_CLICK01);
+        }
+        return false;
+    }
     return true;
 }
 

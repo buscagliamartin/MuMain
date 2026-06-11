@@ -84,6 +84,7 @@
 #include "UI/NewUI/NewUIMuHelper.h"
 #include "UI/NewUI/DuelLadderWindow.h"
 #include "UI/NewUI/MailboxWindow.h"
+#include "UI/NewUI/JewelBankWindow.h"
 
 namespace SEASON3B
 {
@@ -223,6 +224,7 @@ namespace SEASON3B
         CNewUIMuHelperSkillList* m_pNewUIMuHelperSkillList;
         CNewUIDuelLadder* m_pNewUIDuelLadder;
         CNewUIMailbox* m_pNewUIMailbox;
+        CNewUIJewelBank* m_pNewUIJewelBank;
     public:
         CNewUIChatInputBox* GetUI_NewChatInputBox() const;
         CNewUIChatLogWindow* GetUI_NewChatLogWindow() const;
@@ -306,6 +308,7 @@ namespace SEASON3B
         CNewUIMuHelperSkillList* Get_pNewUIMuHelperSkillList() const;
         CNewUIDuelLadder* Get_pNewUIDuelLadder() const;
         CNewUIMailbox* Get_pNewUIMailbox() const;
+        CNewUIJewelBank* Get_pNewUIJewelBank() const;
     };
 }
 
@@ -396,4 +399,5 @@ namespace SEASON3B
 #define g_pNewUIMuHelperSkillList SEASON3B::CNewUISystem::GetInstance()->Get_pNewUIMuHelperSkillList()
 #define g_pNewUIDuelLadder SEASON3B::CNewUISystem::GetInstance()->Get_pNewUIDuelLadder()
 #define g_pNewUIMailbox SEASON3B::CNewUISystem::GetInstance()->Get_pNewUIMailbox()
+#define g_pNewUIJewelBank SEASON3B::CNewUISystem::GetInstance()->Get_pNewUIJewelBank()
 #endif // _NEWUISYSTEM_H_

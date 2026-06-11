@@ -13134,6 +13134,33 @@ namespace
     }
 }
 
+// BarnaMu: jewel bank balances (0xBF, sub-code 0x30) - 17 little-endian uint32 counts, routed to
+// the Jewel Bank window. Wiring-only for the already-merged server Jewel Bank feature.
+void ReceiveJewelBankBalances(std::span<const BYTE> ReceiveBuffer)
+{
+    if (ReceiveBuffer.size() < 72)
+    {
+        return;
+    }
+
+    unsigned int balances[17];
+    for (int i = 0; i < 17; i++)
+    {
+        size_t o = 4 + (size_t)i * 4;
+        balances[i] = (unsigned int)ReceiveBuffer[o]
+            | ((unsigned int)ReceiveBuffer[o + 1] << 8)
+            | ((unsigned int)ReceiveBuffer[o + 2] << 16)
+            | ((unsigned int)ReceiveBuffer[o + 3] << 24);
+    }
+
+    if (g_pNewUIJewelBank)
+    {
+        g_pNewUIJewelBank->SetBalances(balances);
+    }
+
+    g_ConsoleDebug->Write(MCD_RECEIVE, L"0xBF [0x30] [ReceiveJewelBankBalances]");
+}
+
 // BarnaMu: Auction House / Mailbox UI packets (0xBF, sub-code 0x31). Client Feature Bundle Step 2
 // ports the MAILBOX receiver only: it decodes the shared Auction-House packet for the mailbox view
 // (view 2) and routes it to the Mailbox window. The auction-listing views (handled by the Auction
@@ -14780,6 +14807,9 @@ static void ProcessPacket(const BYTE* ReceiveBuffer, int32_t Size)
             break;
         case 0x31:
             ReceiveAuctionHousePacket(received_span);
+            break;
+        case 0x30:
+            ReceiveJewelBankBalances(received_span);
             break;
         }
     }
