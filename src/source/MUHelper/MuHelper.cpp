@@ -21,6 +21,7 @@
 
 constexpr int MAX_ACTIONABLE_DISTANCE = 10;
 constexpr int DEFAULT_DURABILITY_THRESHOLD = 50;
+constexpr float BASIC_ATTACK_DISTANCE = 1.5f;
 
 SpinLock _targetsLock;
 SpinLock _itemsLock;
@@ -30,6 +31,8 @@ extern MovementSkill g_MovementSkill;
 extern int SelectedCharacter;
 extern int TargetX;
 extern int TargetY;
+extern int Attacking;
+extern int ActionTarget;
 
 namespace MUHelper
 {
@@ -37,6 +40,8 @@ namespace MUHelper
 	int& SelectedCharacter = ::SelectedCharacter;
 	int& TargetX = ::TargetX;
 	int& TargetY = ::TargetY;
+	int& Attacking = ::Attacking;
+	int& ActionTarget = ::ActionTarget;
 
     CMuHelper g_MuHelper;
 
@@ -843,7 +848,13 @@ namespace MUHelper
             return 0;
         }
 
-        g_MovementSkill.m_iSkill = iSkill;
+        const int iSkillIndex = g_pSkillList->GetSkillIndex(iSkill);
+        if (iSkillIndex == -1)
+        {
+            return 0;
+        }
+
+        g_MovementSkill.m_iSkill = iSkillIndex;
         g_MovementSkill.m_bMagic = true;
 
         const float fSkillDistance = gSkillManager.GetSkillDistance(iSkill, Hero);
@@ -895,7 +906,14 @@ namespace MUHelper
                 SelectedCharacter = iCharIndex;
 
                 CHARACTER* pTarget = &CharactersClient[iCharIndex];
-                if (pTarget->Dead > 0 || !IsMonster(pTarget))
+                if (pTarget->Dead > 0)
+                {
+                    DeleteTarget(iTarget);
+                    return 0;
+                }
+
+                const bool bCurrentCombatTarget = (iTarget == m_iCurrentTarget);
+                if (bCurrentCombatTarget && !IsMonster(pTarget))
                 {
                     DeleteTarget(iTarget);
                     return 0;
@@ -907,15 +925,14 @@ namespace MUHelper
                 TargetY = (int)(pTarget->Object.Position[1] / TERRAIN_SCALE);
 
                 const bool bTargetNear = CheckTile(Hero, &Hero->Object, fSkillDistance);
-                if (bTargetNear && !CheckWall(Hero->PositionX, Hero->PositionY, TargetX, TargetY))
+                const bool bNoWall = CheckWall(Hero->PositionX, Hero->PositionY, TargetX, TargetY);
+                if (!bTargetNear || !bNoWall)
                 {
-                    DeleteTarget(iTarget);
-                    return 0;
-                }
+                    if (bCurrentCombatTarget)
+                    {
+                        m_iCurrentTarget = -1;
+                    }
 
-                // Phase 1 helper is stationary. Do not chase or send helper movement.
-                if (!bTargetNear)
-                {
                     return 0;
                 }
             }
@@ -937,10 +954,55 @@ namespace MUHelper
 
     int CMuHelper::SimulateBasicAttack(int iTarget)
     {
-        // Phase 1 deliberately saves/displays Basic Attack mode only.
-        // A runtime implementation must avoid mutating SelectedCharacter,
-        // ActionTarget, Attacking, movement type, or movement-skill globals.
-        return 0;
+        if (IsHeroSwingInProgress() || iTarget == -1)
+        {
+            return 0;
+        }
+
+        const int iCharIndex = FindCharacterIndex(iTarget);
+        if (iCharIndex == MAX_CHARACTERS_CLIENT)
+        {
+            DeleteTarget(iTarget);
+            return 0;
+        }
+
+        CHARACTER* pTarget = &CharactersClient[iCharIndex];
+        if (pTarget->Dead > 0 || !IsMonster(pTarget))
+        {
+            DeleteTarget(iTarget);
+            return 0;
+        }
+
+        const int iPreviousSelectedCharacter = SelectedCharacter;
+        const int iPreviousActionTarget = ActionTarget;
+
+        SelectedCharacter = iCharIndex;
+        TargetX = static_cast<int>(pTarget->Object.Position[0] / TERRAIN_SCALE);
+        TargetY = static_cast<int>(pTarget->Object.Position[1] / TERRAIN_SCALE);
+
+        const bool bTargetNear = CheckTile(Hero, &Hero->Object, BASIC_ATTACK_DISTANCE);
+        const bool bNoWall = CheckWall(Hero->PositionX, Hero->PositionY, TargetX, TargetY);
+        if (!bTargetNear || !bNoWall)
+        {
+            m_iCurrentTarget = -1;
+            SelectedCharacter = iPreviousSelectedCharacter;
+            ActionTarget = iPreviousActionTarget;
+            return 0;
+        }
+
+        g_MovementSkill.m_iSkill = AT_SKILL_UNDEFINED;
+        g_MovementSkill.m_bMagic = false;
+        g_MovementSkill.m_iTarget = iCharIndex;
+        ActionTarget = iCharIndex;
+        Attacking = 1;
+        Hero->MovementType = MOVEMENT_ATTACK;
+
+        Action(Hero, &Hero->Object, true);
+
+        SelectedCharacter = iPreviousSelectedCharacter;
+        ActionTarget = iPreviousActionTarget;
+
+        return 1;
     }
 
     int CMuHelper::Regroup()
