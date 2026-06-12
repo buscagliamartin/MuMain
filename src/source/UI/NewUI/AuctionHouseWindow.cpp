@@ -1,6 +1,7 @@
 ﻿#include "stdafx.h"
 
 #include <cwchar>
+#include <span>
 
 #include "UI/NewUI/AuctionHouseWindow.h"
 #include "UI/NewUI/NewUISystem.h"
@@ -439,7 +440,33 @@ void CNewUIAuctionHouse::AddListing(const ListingView& listing)
     if (m_RowCount >= MAX_ROWS)
         return;
 
-    m_Listings[m_RowCount] = listing;
+    ListingView& stored = m_Listings[m_RowCount];
+    stored = listing;
+
+    // BarnaMu Phase 1: decode the REAL item level (and a compact options summary) from the
+    // serialized item bytes the packet now carries. The packet's separate ItemLevel byte is
+    // unreliable for excellent items (it can be 0 while the item is +7), so the display must use
+    // this decoded level and must never show a misleading "+0". When no item bytes are present
+    // (server sent only a text summary, or nothing), RealLevel stays -1 and no level suffix is shown.
+    stored.RealLevel = -1;
+    stored.Options[0] = L'\0';
+    if (stored.ItemDataLength > 0)
+    {
+        ItemCreationParams params = ParseItemData(std::span<const BYTE>(stored.ItemData, stored.ItemDataLength));
+        stored.RealLevel = static_cast<int>(params.Level);
+
+        // Value-free options summary: proves options are decoded and SEPARATE from the item level.
+        // Full per-option lines with names/values are deferred to the later card redesign.
+        wchar_t opt[64] = { 0 };
+        if (params.HasExcellentOption) wcscat(opt, L"Excellent ");
+        if (params.WithLuck)           wcscat(opt, L"Luck ");
+        if (params.WithSkill)          wcscat(opt, L"Skill ");
+        if (params.WithOption)         wcscat(opt, L"Option ");
+        if (params.IsAncient)          wcscat(opt, L"Ancient ");
+        wcsncpy(stored.Options, opt, 63);
+        stored.Options[63] = L'\0';
+    }
+
     m_RowCount++;
 }
 
@@ -1068,7 +1095,10 @@ void CNewUIAuctionHouse::RenderTable()
         wchar_t price[32] = { 0 };
         wchar_t level[16] = { 0 };
         std::swprintf(price, 32, L"%u", listing.Price);
-        std::swprintf(level, 16, L"+%u", listing.ItemLevel);
+        // Real decoded item level only (never the unreliable ItemLevel byte). Blank when unknown,
+        // never a misleading "+0".
+        if (listing.RealLevel >= 0)
+            std::swprintf(level, 16, L"+%d", listing.RealLevel);
         const wchar_t* currencyText = L"?";
         if (listing.Currency == 0)
             currencyText = L"Zen";
@@ -1159,14 +1189,24 @@ void CNewUIAuctionHouse::RenderDetails()
     std::swprintf(idText, 32, L"#%u", listing->ListingNumber);
     std::swprintf(priceText, 48, L"%u %s", listing->Price, GetCurrencyText(listing->Currency, listing->JewelSlot));
     std::swprintf(typeText, 32, L"%u:%u", listing->ItemType / 512, listing->ItemType % 512);
-    std::swprintf(levelText, 16, L"+%u", listing->ItemLevel);
+    if (listing->RealLevel >= 0)
+        std::swprintf(levelText, 16, L"+%d", listing->RealLevel);
+    else
+        std::swprintf(levelText, 16, L"-");
     if (listing->Currency == 2 && listing->JewelSlot < 17)
         std::swprintf(jewelText, 48, L"%u - %s", listing->JewelSlot, GetCurrencyText(listing->Currency, listing->JewelSlot));
     else
         std::swprintf(jewelText, 48, L"-");
 
+    // Title uses the REAL item level (e.g. "Excellent Beuroba +7"), not the unreliable ItemLevel
+    // byte; no "+N" suffix at all when the level couldn't be decoded.
+    wchar_t titleText[80] = { 0 };
+    if (listing->RealLevel >= 0)
+        std::swprintf(titleText, 80, L"%s +%d", listing->ItemName, listing->RealLevel);
+    else
+        std::swprintf(titleText, 80, L"%s", listing->ItemName);
     g_pRenderText->SetTextColor(86, 236, 86, 255);
-    g_pRenderText->RenderText(x + 42, y + 28, listing->ItemName, 74, 0, RT3_SORT_LEFT);
+    g_pRenderText->RenderText(x + 42, y + 28, titleText, 74, 0, RT3_SORT_LEFT);
     g_pRenderText->SetTextColor(216, 218, 218, 255);
     g_pRenderText->RenderText(x + 8, y + 54, L"Listing", 40, 0, RT3_SORT_LEFT);
     g_pRenderText->RenderText(x + 50, y + 54, idText, 66, 0, RT3_SORT_LEFT);
@@ -1184,6 +1224,14 @@ void CNewUIAuctionHouse::RenderDetails()
     g_pRenderText->SetTextColor(156, 166, 176, 255);
     g_pRenderText->RenderText(x + 8, y + 126, L"Jewel", 40, 0, RT3_SORT_LEFT);
     g_pRenderText->RenderText(x + 50, y + 126, jewelText, 66, 0, RT3_SORT_LEFT);
+    // Options shown as a separate line (decoded from the item bytes) so they're never confused with
+    // the item level. Only rendered when present; full per-option names/values come in the redesign.
+    if (listing->Options[0] != L'\0')
+    {
+        g_pRenderText->SetTextColor(150, 206, 150, 255);
+        g_pRenderText->RenderText(x + 8, y + 138, L"Options", 40, 0, RT3_SORT_LEFT);
+        g_pRenderText->RenderText(x + 50, y + 138, listing->Options, 66, 0, RT3_SORT_LEFT);
+    }
 }
 
 void CNewUIAuctionHouse::RenderCreateListing()

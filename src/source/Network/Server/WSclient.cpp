@@ -13253,6 +13253,10 @@ void ReceiveAuctionHousePacket(std::span<const BYTE> ReceiveBuffer)
             ReadAuctionUtf8(&ReceiveBuffer[19], 48, listing.ItemName, 48);
             ReadAuctionUtf8(&ReceiveBuffer[67], 12, listing.SellerName, 12);
             listing.JewelSlot = ReceiveBuffer[79];
+            // BarnaMu Phase 1: also capture the optional item payload (raw bytes or summary) for the
+            // Auction House listing, exactly like the Mailbox path above. Previously discarded, which
+            // left the AH unable to show the real item level / options.
+            readOptionalItemPayload(ReceiveBuffer, listing.ItemData, listing.ItemDataLength, listing.ItemSummary);
             g_pNewUIAuctionHouse->AddListing(listing);
         }
     }

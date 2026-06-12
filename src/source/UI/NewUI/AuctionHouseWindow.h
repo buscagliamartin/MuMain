@@ -23,6 +23,15 @@ namespace SEASON3B
             BYTE Status;
             wchar_t ItemName[48];
             wchar_t SellerName[12];
+            // BarnaMu Phase 1: the serialized item payload the 0xBF/0x31 packet already carries, so a
+            // listing can show the real item level + options instead of the unreliable ItemLevel byte.
+            // The optional payload is EITHER raw item bytes (ItemData/ItemDataLength) OR a text
+            // summary (ItemSummary), depending on what the server sent for that listing.
+            BYTE ItemDataLength;
+            BYTE ItemData[15];
+            wchar_t ItemSummary[256];
+            int RealLevel;          // decoded item level from ItemData; -1 when unknown (show no suffix)
+            wchar_t Options[64];    // compact decoded options (e.g. "Excellent Luck"); empty when none
         };
 
         CNewUIAuctionHouse();
