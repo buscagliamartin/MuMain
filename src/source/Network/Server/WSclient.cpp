@@ -410,6 +410,7 @@ int  EnableUse = 0; // todo: get rid of this, it may cause the stuck client bug,
 
 int SendGetItem = -1; // todo: get rid of this, it may cause the stuck client bug, so that players can't pick up anything anymore.
 int SendDropItem = -1; // todo: get rid of this, it may cause the stuck client bug, so that players can't drop anything anymore.
+extern BOOL g_bPacketAfter_EquipmentItem;
 
 int FindGuildName(wchar_t* Name)
 {
@@ -1572,6 +1573,15 @@ int CalcItemLength(std::span<const BYTE> ReceiveBuffer)
 
 BOOL ReceiveInventoryExtended(std::span<const BYTE> ReceiveBuffer)
 {
+    // Authoritative inventory syncs can arrive mid-session after server-side item delivery
+    // (for example Auction Mailbox claim). Treat them like a relog inventory rebuild and
+    // clear any pending item-move cursor state before recreating the client inventory grid.
+    EquipmentItem = false;
+    g_bPacketAfter_EquipmentItem = FALSE;
+    SendGetItem = -1;
+    SendDropItem = -1;
+    SEASON3B::CNewUIInventoryCtrl::DeletePickedItem();
+
     for (auto & i : CharacterMachine->Equipment)
     {
         i.Type = -1;

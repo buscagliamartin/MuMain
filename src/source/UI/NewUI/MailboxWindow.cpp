@@ -437,28 +437,13 @@ bool CNewUIMailbox::SendClaimAll()
         return true;
     }
 
-    int sent = 0;
-    for (int i = 0; i < m_RowCount; ++i)
-    {
-        const EntryView& entry = m_Entries[i];
-        if (entry.EntryNumber == 0)
-            continue;
-
-        SendClaimEntry(entry);
-        ++sent;
-    }
-
-    wchar_t message[64] = { 0 };
-    if (sent == 1)
-    {
-        std::swprintf(message, 64, L"Claiming 1 entry...");
-    }
-    else
-    {
-        std::swprintf(message, 64, L"Claiming %d entries...", sent);
-    }
-
-    SetStatusMessage(message);
+    // Batched claim-all: send ONE request (op 6 with the claim-all sentinel 0xFFFFFFFF) instead of one
+    // op 6/op 8 per row. The server claims every pending mailbox entry (items + payouts) in a single
+    // batched pass -- one player save, one fresh snapshot (0x22 per claimed item + a single F3-10), and one
+    // mailbox refresh -- so Claim All no longer runs the full ~10s-per-item single-claim flow N times.
+    // The single "Claim" button still uses SendClaimEntry (the conservative per-entry op 6/op 8 path).
+    SendRequest(6, 0, 0, 0xFF, 0xFFFFFFFFu, 0);
+    SetStatusMessage(L"Claiming all entries...");
     return true;
 }
 
