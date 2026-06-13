@@ -605,19 +605,11 @@ bool CNewUIMyInventory::UpdateKeyEvent()
         }
     }
 
-    if (CanOpenMyShopInterface() == true && IsPress('S'))
+    if (IsPress('S'))
     {
-        if (m_bMyShopOpen)
+        if (g_pNewUIAuctionHouse)
         {
-            if (m_MyShopMode == MYSHOP_MODE_OPEN)
-            {
-                ChangeMyShopButtonStateClose();
-            }
-            else if (m_MyShopMode == MYSHOP_MODE_CLOSE)
-            {
-                ChangeMyShopButtonStateOpen();
-            }
-            g_pNewUISystem->Toggle(INTERFACE_MYSHOP_INVENTORY);
+            g_pNewUIAuctionHouse->Toggle();
             PlayBuffer(SOUND_CLICK01);
         }
         return false;
@@ -1198,7 +1190,7 @@ void CNewUIMyInventory::SetButtonInfo()
 
     m_BtnMyShop.ChangeButtonImgState(true, IMAGE_INVENTORY_MYSHOP_OPEN_BTN, false);
     m_BtnMyShop.ChangeButtonInfo(m_Pos.x + 87, m_Pos.y + 391, 36, 29);
-    m_BtnMyShop.ChangeToolTipText(&I18N::Game::OpenPersonalStoreS, true);
+    m_BtnMyShop.ChangeToolTipText(L"Auction House", true);
 
     m_BtnExpand.ChangeButtonImgState(true, IMAGE_INVENTORY_EXPAND_BTN, false);
     m_BtnExpand.ChangeButtonInfo(m_Pos.x + 87 + 37, m_Pos.y + 391, 36, 29);
@@ -1619,18 +1611,10 @@ bool CNewUIMyInventory::BtnProcess()
 
         if (m_bMyShopOpen == true && m_BtnMyShop.UpdateMouseEvent() == true)
         {
-            if (m_MyShopMode == MYSHOP_MODE_OPEN)
+            if (g_pNewUIAuctionHouse)
             {
-                ChangeMyShopButtonStateClose();
-                g_pNewUISystem->Show(INTERFACE_MYSHOP_INVENTORY);
+                g_pNewUIAuctionHouse->Toggle();
             }
-            else if (m_MyShopMode == MYSHOP_MODE_CLOSE)
-            {
-                ChangeMyShopButtonStateOpen();
-                g_pNewUISystem->Hide(INTERFACE_MYSHOP_INVENTORY);
-                g_pNewUISystem->Hide(INTERFACE_PURCHASESHOP_INVENTORY);
-            }
-
             return true;
         }
     }
@@ -1748,7 +1732,7 @@ void CNewUIMyInventory::ChangeMyShopButtonStateOpen()
     m_BtnMyShop.RegisterButtonState(BUTTON_STATE_UP, IMAGE_INVENTORY_MYSHOP_OPEN_BTN, 0);
     m_BtnMyShop.RegisterButtonState(BUTTON_STATE_DOWN, IMAGE_INVENTORY_MYSHOP_OPEN_BTN, 1);
     m_BtnMyShop.ChangeImgIndex(IMAGE_INVENTORY_MYSHOP_OPEN_BTN, 0);
-    m_BtnMyShop.ChangeToolTipText(&I18N::Game::OpenPersonalStoreS, true);
+    m_BtnMyShop.ChangeToolTipText(L"Auction House", true);
 }
 
 void CNewUIMyInventory::ChangeMyShopButtonStateClose()
@@ -1758,7 +1742,7 @@ void CNewUIMyInventory::ChangeMyShopButtonStateClose()
     m_BtnMyShop.RegisterButtonState(BUTTON_STATE_UP, IMAGE_INVENTORY_MYSHOP_CLOSE_BTN, 0);
     m_BtnMyShop.RegisterButtonState(BUTTON_STATE_DOWN, IMAGE_INVENTORY_MYSHOP_CLOSE_BTN, 1);
     m_BtnMyShop.ChangeImgIndex(IMAGE_INVENTORY_MYSHOP_CLOSE_BTN, 0);
-    m_BtnMyShop.ChangeToolTipText(&I18N::Game::ClosePersonalStoreS, true);
+    m_BtnMyShop.ChangeToolTipText(L"Auction House", true);
 }
 
 void CNewUIMyInventory::LockMyShopButtonOpen()
@@ -1766,7 +1750,7 @@ void CNewUIMyInventory::LockMyShopButtonOpen()
     m_BtnMyShop.ChangeImgColor(BUTTON_STATE_UP, RGBA(100, 100, 100, 255));
     m_BtnMyShop.ChangeTextColor(RGBA(100, 100, 100, 255));
     m_BtnMyShop.Lock();
-    m_BtnMyShop.ChangeToolTipText(&I18N::Game::OpenPersonalStoreS, true);
+    m_BtnMyShop.ChangeToolTipText(L"Auction House", true);
 }
 
 void CNewUIMyInventory::UnlockMyShopButtonOpen()
@@ -1774,7 +1758,7 @@ void CNewUIMyInventory::UnlockMyShopButtonOpen()
     m_BtnMyShop.ChangeImgColor(BUTTON_STATE_UP, RGBA(255, 255, 255, 255));
     m_BtnMyShop.ChangeTextColor(RGBA(255, 255, 255, 255));
     m_BtnMyShop.UnLock();
-    m_BtnMyShop.ChangeToolTipText(&I18N::Game::OpenPersonalStoreS, true);
+    m_BtnMyShop.ChangeToolTipText(L"Auction House", true);
 }
 
 void CNewUIMyInventory::ToggleRepairMode()

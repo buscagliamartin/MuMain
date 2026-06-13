@@ -117,6 +117,7 @@ CNewUISystem::CNewUISystem()
     m_pNewGensRanking = nullptr;
 #endif //PBG_ADD_GENSRANKING
     m_pNewUnitedMarketPlaceWindow = nullptr;
+    m_pNewUIAuctionHouse = nullptr;
 }
 
 CNewUISystem::~CNewUISystem()
@@ -522,6 +523,22 @@ bool CNewUISystem::LoadMainSceneInterface()
 
     m_pNewUIMuHelperSkillList = new CNewUIMuHelperSkillList;
     if (m_pNewUIMuHelperSkillList->Create(m_pNewUIMng, m_pNewUI3DRenderMng) == false)
+        return false;
+
+    m_pNewUIDuelLadder = new CNewUIDuelLadder;
+    if (m_pNewUIDuelLadder->Create(m_pNewUIMng, (640 - CNewUIDuelLadder::WINDOW_WIDTH) / 2, 36) == false)
+        return false;
+
+    m_pNewUIMailbox = new CNewUIMailbox;
+    if (m_pNewUIMailbox->Create(m_pNewUIMng, m_pNewUI3DRenderMng, (640 - CNewUIMailbox::WINDOW_WIDTH) / 2, 10) == false)
+        return false;
+
+    m_pNewUIJewelBank = new CNewUIJewelBank;
+    if (m_pNewUIJewelBank->Create(m_pNewUIMng, m_pNewUI3DRenderMng, 0, 0) == false)
+        return false;
+
+    m_pNewUIAuctionHouse = new CNewUIAuctionHouse;
+    if (m_pNewUIAuctionHouse->Create(m_pNewUIMng, m_pNewUI3DRenderMng, 0, 0) == false)
         return false;
 
     return true;
@@ -2437,4 +2454,24 @@ CNewUIMuHelperExt* CNewUISystem::Get_pNewUIMuHelperExt() const
 CNewUIMuHelperSkillList* CNewUISystem::Get_pNewUIMuHelperSkillList() const
 {
     return m_pNewUIMuHelperSkillList;
+}
+
+CNewUIDuelLadder* CNewUISystem::Get_pNewUIDuelLadder() const
+{
+    return m_pNewUIDuelLadder;
+}
+
+CNewUIMailbox* CNewUISystem::Get_pNewUIMailbox() const
+{
+    return m_pNewUIMailbox;
+}
+
+CNewUIJewelBank* CNewUISystem::Get_pNewUIJewelBank() const
+{
+    return m_pNewUIJewelBank;
+}
+
+CNewUIAuctionHouse* CNewUISystem::Get_pNewUIAuctionHouse() const
+{
+    return m_pNewUIAuctionHouse;
 }

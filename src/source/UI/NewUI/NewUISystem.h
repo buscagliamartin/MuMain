@@ -82,6 +82,10 @@
 
 #include "UI/NewUI/Inventory/NewUILuckyItemWnd.h"
 #include "UI/NewUI/NewUIMuHelper.h"
+#include "UI/NewUI/DuelLadderWindow.h"
+#include "UI/NewUI/MailboxWindow.h"
+#include "UI/NewUI/JewelBankWindow.h"
+#include "UI/NewUI/AuctionHouseWindow.h"
 
 namespace SEASON3B
 {
@@ -219,6 +223,10 @@ namespace SEASON3B
         CNewUIMuHelper* m_pNewUIMuHelper;
         CNewUIMuHelperExt* m_pNewUIMuHelperExt;
         CNewUIMuHelperSkillList* m_pNewUIMuHelperSkillList;
+        CNewUIDuelLadder* m_pNewUIDuelLadder;
+        CNewUIMailbox* m_pNewUIMailbox;
+        CNewUIJewelBank* m_pNewUIJewelBank;
+        CNewUIAuctionHouse* m_pNewUIAuctionHouse;
     public:
         CNewUIChatInputBox* GetUI_NewChatInputBox() const;
         CNewUIChatLogWindow* GetUI_NewChatLogWindow() const;
@@ -300,6 +308,10 @@ namespace SEASON3B
         CNewUIMuHelper* Get_pNewUIMuHelper() const;
         CNewUIMuHelperExt* Get_pNewUIMuHelperExt() const;
         CNewUIMuHelperSkillList* Get_pNewUIMuHelperSkillList() const;
+        CNewUIDuelLadder* Get_pNewUIDuelLadder() const;
+        CNewUIMailbox* Get_pNewUIMailbox() const;
+        CNewUIJewelBank* Get_pNewUIJewelBank() const;
+        CNewUIAuctionHouse* Get_pNewUIAuctionHouse() const;
     };
 }
 
@@ -388,4 +400,8 @@ namespace SEASON3B
 #define g_pNewUIMuHelper SEASON3B::CNewUISystem::GetInstance()->Get_pNewUIMuHelper()
 #define g_pNewUIMuHelperExt SEASON3B::CNewUISystem::GetInstance()->Get_pNewUIMuHelperExt()
 #define g_pNewUIMuHelperSkillList SEASON3B::CNewUISystem::GetInstance()->Get_pNewUIMuHelperSkillList()
+#define g_pNewUIDuelLadder SEASON3B::CNewUISystem::GetInstance()->Get_pNewUIDuelLadder()
+#define g_pNewUIMailbox SEASON3B::CNewUISystem::GetInstance()->Get_pNewUIMailbox()
+#define g_pNewUIJewelBank SEASON3B::CNewUISystem::GetInstance()->Get_pNewUIJewelBank()
+#define g_pNewUIAuctionHouse SEASON3B::CNewUISystem::GetInstance()->Get_pNewUIAuctionHouse()
 #endif // _NEWUISYSTEM_H_

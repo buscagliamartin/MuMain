@@ -255,6 +255,24 @@ bool CNewUIInventoryActionController::HandleSellToNPC(CNewUIInventoryCtrl* targe
 
 bool CNewUIInventoryActionController::HandleInventoryRightClickActions(CNewUIInventoryCtrl* targetControl) const
 {
+    if (g_pNewUIAuctionHouse != nullptr
+        && g_pNewUIAuctionHouse->IsCreateListingView()
+        && targetControl != nullptr
+        && targetControl->GetStorageType() == STORAGE_TYPE::INVENTORY)
+    {
+        ITEM* pAuctionItem = targetControl->FindItemAtPt(MouseX, MouseY);
+        if (pAuctionItem != nullptr)
+        {
+            const int auctionSlot = targetControl->GetIndexByItem(pAuctionItem);
+            if (auctionSlot >= MAX_EQUIPMENT_INDEX
+                && auctionSlot < MAX_MY_INVENTORY_EX_INDEX
+                && g_pNewUIAuctionHouse->TrySetCreateListingItemFromInventorySlot(auctionSlot))
+            {
+                return true;
+            }
+        }
+    }
+
     if (g_pNewUISystem->IsVisible(INTERFACE_INVENTORY_EXT))
     {
         return TryTransferBetweenInventorySections(targetControl);
@@ -377,7 +395,15 @@ bool CNewUIInventoryActionController::TryEquipItem(CNewUIInventoryCtrl* targetCo
         return true;
     }
 
-    if (!CNewUIInventoryCtrl::CreatePickedItem(nullptr, pItem))
+    // Own the picked item with its SOURCE control (not nullptr). Right-click auto-equip optimistically
+    // pulls the item onto the cursor and removes it from the grid before the server round-trip. If that
+    // equip move does not resolve as a clean success -- e.g. the very first equip of a freshly claimed
+    // Auction Mailbox item, before the live session state catches up with the F3-10/0x22 repaint -- the
+    // shared recovery CNewUIInventoryCtrl::BackupPickedItem() can ONLY restore a pick that has a source
+    // owner inventory. With a nullptr owner the item was stranded on the (hidden) cursor and vanished
+    // from the inventory until a relog reloaded it from the DB. Passing targetControl lets the standard
+    // recovery put the item back in its slot, so it stays interactive and a retry equips normally.
+    if (!CNewUIInventoryCtrl::CreatePickedItem(targetControl, pItem))
     {
         return false;
     }

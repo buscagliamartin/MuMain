@@ -351,6 +351,39 @@ bool SEASON3B::CNewUIHotKey::UpdateKeyEvent()
         PlayBuffer(SOUND_CLICK01);
         return false;
     }
+    else if (SEASON3B::IsPress('L'))
+    {
+        // BarnaMu Duel Ladder hub. The window is manager-driven (created in NewUISystem) and owns
+        // its own show/hide via Toggle(), like the MuHelper windows above.
+        if (g_pNewUIDuelLadder)
+        {
+            g_pNewUIDuelLadder->Toggle();
+            PlayBuffer(SOUND_CLICK01);
+        }
+        return false;
+    }
+    else if (SEASON3B::IsPress('J'))
+    {
+        // BarnaMu Jewel Bank. In the reference it opened from the MU Helper menu; clean keeps the
+        // MuHelper foundation untouched, so the window is opened with this isolated hotkey instead.
+        // Toggle() queries balances from the already-merged server (0xBF/0x30) when it opens.
+        if (g_pNewUIJewelBank)
+        {
+            g_pNewUIJewelBank->Toggle();
+            PlayBuffer(SOUND_CLICK01);
+        }
+        return false;
+    }
+    else if (SEASON3B::IsPress('S'))
+    {
+        // BarnaMu Auction House. Opens the standalone market window and requests the browse view.
+        if (g_pNewUIAuctionHouse)
+        {
+            g_pNewUIAuctionHouse->Toggle();
+            PlayBuffer(SOUND_CLICK01);
+        }
+        return false;
+    }
     return true;
 }
 

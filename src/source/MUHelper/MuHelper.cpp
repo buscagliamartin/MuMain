@@ -21,6 +21,7 @@
 
 constexpr int MAX_ACTIONABLE_DISTANCE = 10;
 constexpr int DEFAULT_DURABILITY_THRESHOLD = 50;
+constexpr float BASIC_ATTACK_DISTANCE = 1.5f;
 
 SpinLock _targetsLock;
 SpinLock _itemsLock;
@@ -30,6 +31,8 @@ extern MovementSkill g_MovementSkill;
 extern int SelectedCharacter;
 extern int TargetX;
 extern int TargetY;
+extern int Attacking;
+extern int ActionTarget;
 
 namespace MUHelper
 {
@@ -37,6 +40,8 @@ namespace MUHelper
 	int& SelectedCharacter = ::SelectedCharacter;
 	int& TargetX = ::TargetX;
 	int& TargetY = ::TargetY;
+	int& Attacking = ::Attacking;
+	int& ActionTarget = ::ActionTarget;
 
     CMuHelper g_MuHelper;
 
@@ -188,11 +193,6 @@ namespace MUHelper
                 return;
             }
 
-            if (!Regroup())
-            {
-                return;
-            }
-
             Attack();
 
             RepairEquipments();
@@ -211,7 +211,7 @@ namespace MUHelper
         }
 
         CHARACTER* pTarget = FindCharacterByKey(iTargetId);
-        if (!pTarget || pTarget == Hero)
+        if (!pTarget || pTarget == Hero || !IsMonster(pTarget))
         {
             return;
         }
@@ -704,6 +704,11 @@ namespace MUHelper
 
     int CMuHelper::Attack()
     {
+        if (m_config.iAttackMode == ATTACK_MODE_BUFFS)
+        {
+            return 0;
+        }
+
         if (m_iCurrentTarget == -1)
         {
             if (!m_setTargets.empty())
@@ -727,6 +732,11 @@ namespace MUHelper
             }
         }
 
+        if (m_config.iAttackMode == ATTACK_MODE_BASIC)
+        {
+            return SimulateBasicAttack(m_iCurrentTarget);
+        }
+
         if (m_config.bUseCombo)
         {
             return SimulateComboAttack();
@@ -739,14 +749,6 @@ namespace MUHelper
             if (CanExecuteSkill(Hero, m_iCurrentSkill, fSkillDistance))
             {
                 return SimulateAttack(m_iCurrentSkill);
-            }
-        }
-
-        if (m_config.bFallbackBasicAttack)
-        {
-            if (!Hero->Movement)
-            {
-                return SimulateBasicAttack(m_iCurrentTarget);
             }
         }
 
@@ -846,7 +848,13 @@ namespace MUHelper
             return 0;
         }
 
-        g_MovementSkill.m_iSkill = iSkill;
+        const int iSkillIndex = g_pSkillList->GetSkillIndex(iSkill);
+        if (iSkillIndex == -1)
+        {
+            return 0;
+        }
+
+        g_MovementSkill.m_iSkill = iSkillIndex;
         g_MovementSkill.m_bMagic = true;
 
         const float fSkillDistance = gSkillManager.GetSkillDistance(iSkill, Hero);
@@ -904,47 +912,27 @@ namespace MUHelper
                     return 0;
                 }
 
+                const bool bCurrentCombatTarget = (iTarget == m_iCurrentTarget);
+                if (bCurrentCombatTarget && !IsMonster(pTarget))
+                {
+                    DeleteTarget(iTarget);
+                    return 0;
+                }
+
                 g_MovementSkill.m_iTarget = iCharIndex;
 
                 TargetX = (int)(pTarget->Object.Position[0] / TERRAIN_SCALE);
                 TargetY = (int)(pTarget->Object.Position[1] / TERRAIN_SCALE);
 
-                PATH_t tempPath;
-                bool bHasPath = PathFinding2(Hero->PositionX, Hero->PositionY, TargetX, TargetY, &tempPath, m_iHuntingDistance + fSkillDistance);
-                
-                // Target not reachable, ignore it
-                if (!bHasPath)
-                {
-                    DeleteTarget(iTarget);
-                    return 0;
-                }
-
                 const bool bTargetNear = CheckTile(Hero, &Hero->Object, fSkillDistance);
-                if (bTargetNear && !CheckWall(Hero->PositionX, Hero->PositionY, TargetX, TargetY))
+                const bool bNoWall = CheckWall(Hero->PositionX, Hero->PositionY, TargetX, TargetY);
+                if (!bTargetNear || !bNoWall)
                 {
-                    DeleteTarget(iTarget);
-                    return 0;
-                }
-
-                // Target is not yet in range, move closer.
-                if (!bTargetNear)
-                {
-                    Hero->Path.Lock.lock();
-
-                    // Limit movement to 2 steps at a time
-                    int pathNum = std::min<int>(tempPath.PathNum, 2);
-                    for (int i = 0; i < pathNum; i++)
+                    if (bCurrentCombatTarget)
                     {
-                        Hero->Path.PathX[i] = tempPath.PathX[i];
-                        Hero->Path.PathY[i] = tempPath.PathY[i];
+                        m_iCurrentTarget = -1;
                     }
-                    Hero->Path.PathNum = pathNum;
-                    Hero->Path.CurrentPath = 0;
-                    Hero->Path.CurrentPathFloat = 0;
 
-                    Hero->Path.Lock.unlock();
-
-                    SendMove(Hero, &Hero->Object);
                     return 0;
                 }
             }
@@ -966,14 +954,7 @@ namespace MUHelper
 
     int CMuHelper::SimulateBasicAttack(int iTarget)
     {
-        if (iTarget == -1)
-        {
-            return 0;
-        }
-
-        // Let the current swing finish before attacking again, so the cadence
-        // tracks AttackSpeed instead of the fixed helper timer.
-        if (IsHeroSwingInProgress())
+        if (IsHeroSwingInProgress() || iTarget == -1)
         {
             return 0;
         }
@@ -992,98 +973,58 @@ namespace MUHelper
             return 0;
         }
 
-        constexpr float BASIC_RANGE_DEFAULT = 1.8f;
-        constexpr float BASIC_RANGE_SPEAR = 2.2f;
-        constexpr float BASIC_RANGE_BOW = 6.0f;
-
-        float fRange = BASIC_RANGE_DEFAULT;
-        const int iWeaponRight = CharacterMachine->Equipment[EQUIPMENT_WEAPON_RIGHT].Type;
-        if (iWeaponRight >= ITEM_SPEAR && iWeaponRight < ITEM_SPEAR + MAX_ITEM_INDEX)
+        const int iPreviousSelectedCharacter = SelectedCharacter;
+        const int iPreviousActionTarget = ActionTarget;
+        const int iPreviousTargetX = TargetX;
+        const int iPreviousTargetY = TargetY;
+        const int iPreviousAttacking = Attacking;
+        const auto previousMovementType = Hero->MovementType;
+        const MovementSkill previousMovementSkill = g_MovementSkill;
+        const auto restoreActionState = [&]()
         {
-            fRange = BASIC_RANGE_SPEAR;
-        }
-        if (gCharacterManager.GetEquipedBowType() != BOWTYPE_NONE)
-        {
-            fRange = BASIC_RANGE_BOW;
-        }
+            SelectedCharacter = iPreviousSelectedCharacter;
+            ActionTarget = iPreviousActionTarget;
+            TargetX = iPreviousTargetX;
+            TargetY = iPreviousTargetY;
+            Attacking = iPreviousAttacking;
+            Hero->MovementType = previousMovementType;
+            g_MovementSkill = previousMovementSkill;
+        };
 
         SelectedCharacter = iCharIndex;
-        TargetX = (int)(pTarget->Object.Position[0] / TERRAIN_SCALE);
-        TargetY = (int)(pTarget->Object.Position[1] / TERRAIN_SCALE);
+        TargetX = static_cast<int>(pTarget->Object.Position[0] / TERRAIN_SCALE);
+        TargetY = static_cast<int>(pTarget->Object.Position[1] / TERRAIN_SCALE);
 
-        PATH_t tempPath;
-        const bool bHasPath = PathFinding2(Hero->PositionX, Hero->PositionY, TargetX, TargetY, &tempPath, m_iHuntingDistance + fRange);
-        if (!bHasPath)
+        const bool bTargetNear = CheckTile(Hero, &Hero->Object, BASIC_ATTACK_DISTANCE);
+        const bool bNoWall = CheckWall(Hero->PositionX, Hero->PositionY, TargetX, TargetY);
+        if (!bTargetNear || !bNoWall)
         {
-            DeleteTarget(iTarget);
+            m_iCurrentTarget = -1;
+            restoreActionState();
             return 0;
         }
 
-        const bool bTargetNear = CheckTile(Hero, &Hero->Object, fRange);
-        if (bTargetNear && !CheckWall(Hero->PositionX, Hero->PositionY, TargetX, TargetY))
-        {
-            DeleteTarget(iTarget);
-            return 0;
-        }
-
-        // Target is not yet in range, move closer.
-        if (!bTargetNear)
-        {
-            Hero->Path.Lock.lock();
-            const int pathNum = std::min<int>(tempPath.PathNum, 2);
-            for (int i = 0; i < pathNum; i++)
-            {
-                Hero->Path.PathX[i] = tempPath.PathX[i];
-                Hero->Path.PathY[i] = tempPath.PathY[i];
-            }
-            Hero->Path.PathNum = pathNum;
-            Hero->Path.CurrentPath = 0;
-            Hero->Path.CurrentPathFloat = 0;
-            Hero->Path.Lock.unlock();
-
-            SendMove(Hero, &Hero->Object);
-            return 0;
-        }
-
-        Hero->MovementType = MOVEMENT_ATTACK;
+        g_MovementSkill.m_iSkill = AT_SKILL_UNDEFINED;
+        g_MovementSkill.m_bMagic = false;
+        g_MovementSkill.m_iTarget = iCharIndex;
         ActionTarget = iCharIndex;
         Attacking = 1;
+        Hero->MovementType = MOVEMENT_ATTACK;
+
         Action(Hero, &Hero->Object, true);
+
+        restoreActionState();
+
         return 1;
     }
 
     int CMuHelper::Regroup()
     {
-        if (m_config.bReturnToOriginalPosition && m_iSecondsAway > m_config.iMaxSecondsAway)
-        {
-            if (!SimulateMove(m_posOriginal))
-            {
-                return 0;
-            }
-
-            m_iSecondsAway = 0;
-            m_iComboState = 0;
-            m_iCurrentTarget = -1;
-        }
-
         return 1;
     }
 
     int CMuHelper::SimulateMove(POINT posMove)
     {
-        Hero->MovementType = MOVEMENT_MOVE;
-        TargetX = (int)posMove.x;
-        TargetY = (int)posMove.y;
-
-        if (!CheckTile(Hero, &Hero->Object, 1.5f))
-        {
-            if (PathFinding2((Hero->PositionX), (Hero->PositionY), TargetX, TargetY, &Hero->Path))
-            {
-                SendMove(Hero, &Hero->Object);
-            }
-            return 0;
-        }
-
         return 1;
     }
 
@@ -1179,16 +1120,7 @@ namespace MUHelper
         int iDistance = ComputeDistanceBetween({ Hero->PositionX, Hero->PositionY }, { TargetX, TargetY });
         if (iDistance <= m_iObtainingDistance)
         {
-            if (!CheckTile(Hero, &Hero->Object, 2.0f))
-            {
-                if (PathFinding2((Hero->PositionX), (Hero->PositionY), TargetX, TargetY, &Hero->Path))
-                {
-                    SendMove(Hero, &Hero->Object);
-                }
-
-                return 0;
-            }
-            else
+            if (CheckTile(Hero, &Hero->Object, 2.0f))
             {
                 if (SendGetItem == -1)
                 {

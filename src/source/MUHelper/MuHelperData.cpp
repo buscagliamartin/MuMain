@@ -111,6 +111,9 @@ namespace MUHelper
 
 		netData.UseDarkSpirits = gameData.bUseDarkRaven ? 1 : 0;
 		netData.PetAttack = static_cast<BYTE>(gameData.iDarkRavenMode);
+		netData.ServerMode = gameData.iAttackMode >= ATTACK_MODE_SKILL && gameData.iAttackMode <= ATTACK_MODE_BASIC
+			? static_cast<BYTE>(gameData.iAttackMode)
+			: static_cast<BYTE>(ATTACK_MODE_SKILL);
 
 		netData.RepairItem = gameData.bRepairItem ? 1 : 0;
 		netData.ObtainRange = static_cast<BYTE>(gameData.iObtainingRange & 0x0F);
@@ -143,7 +146,7 @@ namespace MUHelper
 		netData.bUseSelfDefense = gameData.bUseSelfDefense ? 1 : 0;
 		netData.bAutoAcceptFriend = gameData.bAutoAcceptFriend ? 1 : 0;
 		netData.bAutoAcceptGuild = gameData.bAutoAcceptGuild ? 1 : 0;
-		netData.bFallbackBasicAttack = gameData.bFallbackBasicAttack ? 1 : 0;
+		netData.bFallbackBasicAttack = 0;
 	}
 
 	void ConfigDataSerDe::Deserialize(const PRECEIVE_MUHELPER_DATA& netData, ConfigData& gameData)
@@ -203,6 +206,9 @@ namespace MUHelper
 
 		gameData.bUseDarkRaven = (bool)netData.UseDarkSpirits;
 		gameData.iDarkRavenMode = static_cast<int>(netData.PetAttack);
+		gameData.iAttackMode = netData.ServerMode <= ATTACK_MODE_BASIC
+			? static_cast<int>(netData.ServerMode)
+			: static_cast<int>(ATTACK_MODE_SKILL);
 		gameData.bRepairItem = (bool)netData.RepairItem;
 
 		gameData.iObtainingRange = static_cast<int>(netData.ObtainRange);
@@ -234,7 +240,7 @@ namespace MUHelper
 		gameData.bUseSelfDefense = (bool)netData.bUseSelfDefense;
 		gameData.bAutoAcceptFriend = (bool)netData.bAutoAcceptFriend;
 		gameData.bAutoAcceptGuild = (bool)netData.bAutoAcceptGuild;
-		gameData.bFallbackBasicAttack = (bool)netData.bFallbackBasicAttack;
+		gameData.bFallbackBasicAttack = false;
 	}
 
 }

@@ -410,6 +410,7 @@ int  EnableUse = 0; // todo: get rid of this, it may cause the stuck client bug,
 
 int SendGetItem = -1; // todo: get rid of this, it may cause the stuck client bug, so that players can't pick up anything anymore.
 int SendDropItem = -1; // todo: get rid of this, it may cause the stuck client bug, so that players can't drop anything anymore.
+extern BOOL g_bPacketAfter_EquipmentItem;
 
 int FindGuildName(wchar_t* Name)
 {
@@ -1572,6 +1573,15 @@ int CalcItemLength(std::span<const BYTE> ReceiveBuffer)
 
 BOOL ReceiveInventoryExtended(std::span<const BYTE> ReceiveBuffer)
 {
+    // Authoritative inventory syncs can arrive mid-session after server-side item delivery
+    // (for example Auction Mailbox claim). Treat them like a relog inventory rebuild and
+    // clear any pending item-move cursor state before recreating the client inventory grid.
+    EquipmentItem = false;
+    g_bPacketAfter_EquipmentItem = FALSE;
+    SendGetItem = -1;
+    SendDropItem = -1;
+    SEASON3B::CNewUIInventoryCtrl::DeletePickedItem();
+
     for (auto & i : CharacterMachine->Equipment)
     {
         i.Type = -1;
@@ -13095,6 +13105,347 @@ void ReceiveDarkside(const BYTE* ReceiveBuffer)
     }
 }
 
+namespace
+{
+    unsigned int ReadAuctionUInt32(const BYTE* data)
+    {
+        return static_cast<unsigned int>(data[0])
+            | (static_cast<unsigned int>(data[1]) << 8)
+            | (static_cast<unsigned int>(data[2]) << 16)
+            | (static_cast<unsigned int>(data[3]) << 24);
+    }
+
+    unsigned short ReadAuctionUInt16(const BYTE* data)
+    {
+        return static_cast<unsigned short>(data[0] | (data[1] << 8));
+    }
+
+    void ReadAuctionUtf8(const BYTE* source, int sourceLength, wchar_t* target, int targetLength)
+    {
+        if (target == NULL || targetLength <= 0)
+        {
+            return;
+        }
+
+        target[0] = L'\0';
+        int length = 0;
+        while (length < sourceLength && source[length] != 0)
+        {
+            length++;
+        }
+
+        if (length == 0)
+        {
+            return;
+        }
+
+        const int written = MultiByteToWideChar(CP_UTF8, 0, reinterpret_cast<const char*>(source), length, target, targetLength - 1);
+        target[written >= 0 ? written : 0] = L'\0';
+    }
+}
+
+// BarnaMu: jewel bank balances (0xBF, sub-code 0x30) - 17 little-endian uint32 counts, routed to
+// the Jewel Bank window. Wiring-only for the already-merged server Jewel Bank feature.
+void ReceiveJewelBankBalances(std::span<const BYTE> ReceiveBuffer)
+{
+    if (ReceiveBuffer.size() < 72)
+    {
+        return;
+    }
+
+    unsigned int balances[17];
+    for (int i = 0; i < 17; i++)
+    {
+        size_t o = 4 + (size_t)i * 4;
+        balances[i] = (unsigned int)ReceiveBuffer[o]
+            | ((unsigned int)ReceiveBuffer[o + 1] << 8)
+            | ((unsigned int)ReceiveBuffer[o + 2] << 16)
+            | ((unsigned int)ReceiveBuffer[o + 3] << 24);
+    }
+
+    if (g_pNewUIJewelBank)
+    {
+        g_pNewUIJewelBank->SetBalances(balances);
+    }
+
+    g_ConsoleDebug->Write(MCD_RECEIVE, L"0xBF [0x30] [ReceiveJewelBankBalances]");
+}
+
+// BarnaMu: Auction House / Mailbox UI packets (0xBF, sub-code 0x31). View 2 is shared by the
+// standalone Mailbox and Auction House "Bought" tab, so the currently visible window owns it. Ops:
+// 0 = page header, 1 = one row entry, 2 = status message, 3 = Postman NPC "open mailbox" trigger.
+void ReceiveAuctionHousePacket(std::span<const BYTE> ReceiveBuffer)
+{
+    if (ReceiveBuffer.size() < 5)
+    {
+        return;
+    }
+
+    constexpr BYTE MAILBOX_VIEW = 2;
+
+    const BYTE op = ReceiveBuffer[4];
+    if (op == 0 && ReceiveBuffer.size() >= 8)
+    {
+        const BYTE view = ReceiveBuffer[5];
+        const bool auctionHouseVisible = g_pNewUIAuctionHouse != NULL && g_pNewUIAuctionHouse->IsVisible();
+        if (view == MAILBOX_VIEW && g_pNewUIMailbox != NULL && auctionHouseVisible == false)
+        {
+            g_pNewUIMailbox->SetMailboxHeader(view, ReceiveBuffer[6], ReceiveBuffer[7]);
+        }
+        else if (g_pNewUIAuctionHouse != NULL)
+        {
+            g_pNewUIAuctionHouse->SetListingsHeader(view, ReceiveBuffer[6], ReceiveBuffer[7]);
+        }
+    }
+    else if (op == 3)
+    {
+        // BarnaMu: the Postman NPC (Lorencia) asked us to open the Mailbox window. Open it only if
+        // it isn't already up; opening it triggers the window's own request for its contents.
+        if (g_pNewUIMailbox != NULL && g_pNewUIMailbox->IsVisible() == false)
+        {
+            g_pNewUIMailbox->Toggle();
+        }
+    }
+    else if (op == 1 && ReceiveBuffer.size() >= 80)
+    {
+        auto readOptionalItemPayload = [](std::span<const BYTE> receiveBuffer, BYTE* itemData, BYTE& itemDataLength, wchar_t* summary)
+        {
+            constexpr int OptionalPayloadOffset = 80;
+            constexpr int SummaryLength = 256;
+            constexpr int MaxAuctionItemDataLength = 15;
+            itemDataLength = 0;
+            if (receiveBuffer.size() <= OptionalPayloadOffset)
+            {
+                return;
+            }
+
+            const BYTE declaredLength = receiveBuffer[OptionalPayloadOffset];
+            if (declaredLength <= MaxAuctionItemDataLength
+                && receiveBuffer.size() >= static_cast<size_t>(OptionalPayloadOffset + 1 + declaredLength))
+            {
+                itemDataLength = declaredLength;
+                if (declaredLength > 0)
+                {
+                    memcpy(itemData, &receiveBuffer[OptionalPayloadOffset + 1], declaredLength);
+                }
+                return;
+            }
+
+            const int availableSummaryLength = std::min<int>(SummaryLength, static_cast<int>(receiveBuffer.size()) - OptionalPayloadOffset);
+            ReadAuctionUtf8(&receiveBuffer[OptionalPayloadOffset], availableSummaryLength, summary, SummaryLength);
+        };
+        const BYTE view = ReceiveBuffer[5];
+        const bool auctionHouseVisible = g_pNewUIAuctionHouse != NULL && g_pNewUIAuctionHouse->IsVisible();
+        if (view == MAILBOX_VIEW && g_pNewUIMailbox != NULL && auctionHouseVisible == false)
+        {
+            SEASON3B::CNewUIMailbox::EntryView entry = {};
+            entry.Status = ReceiveBuffer[6];
+            entry.Currency = ReceiveBuffer[7];
+            entry.EntryNumber = ReadAuctionUInt32(&ReceiveBuffer[8]);
+            entry.ItemType = ReadAuctionUInt16(&ReceiveBuffer[12]);
+            entry.ItemLevel = ReceiveBuffer[14];
+            entry.Amount = ReadAuctionUInt32(&ReceiveBuffer[15]);
+            ReadAuctionUtf8(&ReceiveBuffer[19], 48, entry.ItemName, 48);
+            ReadAuctionUtf8(&ReceiveBuffer[67], 12, entry.SourceName, 12);
+            entry.JewelSlot = ReceiveBuffer[79];
+            readOptionalItemPayload(ReceiveBuffer, entry.ItemData, entry.ItemDataLength, entry.ItemSummary);
+            g_pNewUIMailbox->AddMailboxEntry(entry);
+        }
+        else if (g_pNewUIAuctionHouse != NULL)
+        {
+            SEASON3B::CNewUIAuctionHouse::ListingView listing = {};
+            listing.Status = ReceiveBuffer[6];
+            listing.Currency = ReceiveBuffer[7];
+            listing.ListingNumber = ReadAuctionUInt32(&ReceiveBuffer[8]);
+            listing.ItemType = ReadAuctionUInt16(&ReceiveBuffer[12]);
+            listing.ItemLevel = ReceiveBuffer[14];
+            listing.Price = ReadAuctionUInt32(&ReceiveBuffer[15]);
+            ReadAuctionUtf8(&ReceiveBuffer[19], 48, listing.ItemName, 48);
+            ReadAuctionUtf8(&ReceiveBuffer[67], 12, listing.SellerName, 12);
+            listing.JewelSlot = ReceiveBuffer[79];
+            // BarnaMu Phase 1: also capture the optional item payload (raw bytes or summary) for the
+            // Auction House listing, exactly like the Mailbox path above. Previously discarded, which
+            // left the AH unable to show the real item level / options.
+            readOptionalItemPayload(ReceiveBuffer, listing.ItemData, listing.ItemDataLength, listing.ItemSummary);
+            g_pNewUIAuctionHouse->AddListing(listing);
+        }
+    }
+    else if (op == 2 && ReceiveBuffer.size() > 5)
+    {
+        wchar_t message[128] = { 0 };
+        ReadAuctionUtf8(&ReceiveBuffer[5], static_cast<int>(ReceiveBuffer.size() - 5), message, 128);
+
+        if (g_pNewUIMailbox != NULL)
+        {
+            g_pNewUIMailbox->SetStatusMessage(message);
+        }
+        if (g_pNewUIAuctionHouse != NULL)
+        {
+            g_pNewUIAuctionHouse->SetStatusMessage(message);
+        }
+    }
+
+    g_ConsoleDebug->Write(MCD_RECEIVE, L"0xBF [0x31] [ReceiveAuctionHousePacket]");
+}
+
+// BarnaMu Duel Ladder hub response (server 0xBF / sub 0x32). Decodes the already-merged
+// server contract into the client window. op 0 = top list (23-byte rows), op 1 = my profile,
+// op 2 = waiting-to-fight (21-byte rows), op 3 = match history (22-byte rows), op 4 = hall of
+// fame (26-byte rows), op 5 = top-guild names (10-byte rows, matched to op-0 rows by index).
+// Guards a missing/short buffer and a not-yet-created window; never throws.
+void ReceiveDuelLadderResponse(std::span<const BYTE> ReceiveBuffer)
+{
+    if (ReceiveBuffer.size() < 5 || g_pNewUIDuelLadder == nullptr)
+    {
+        return;
+    }
+
+    BYTE op = ReceiveBuffer[4];
+    if (op == 0)
+    {
+        if (ReceiveBuffer.size() < 7)
+        {
+            return;
+        }
+
+        BYTE bracket = ReceiveBuffer[5];
+        BYTE count = ReceiveBuffer[6];
+        if (count > 10)
+        {
+            count = 10;
+        }
+
+        const size_t needed = 7 + (size_t)count * 23;
+        if (ReceiveBuffer.size() < needed)
+        {
+            return;
+        }
+
+        g_pNewUIDuelLadder->SetTopData(bracket, count, ReceiveBuffer.data() + 7, (int)(count * 23));
+    }
+    else if (op == 1)
+    {
+        if (ReceiveBuffer.size() < 21)
+        {
+            return;
+        }
+
+        BYTE bracket = ReceiveBuffer[5];
+        BYTE tier = ReceiveBuffer[6];
+        unsigned int rating = (unsigned int)ReceiveBuffer[7]
+            | ((unsigned int)ReceiveBuffer[8] << 8)
+            | ((unsigned int)ReceiveBuffer[9] << 16)
+            | ((unsigned int)ReceiveBuffer[10] << 24);
+        unsigned int wins = (unsigned int)ReceiveBuffer[11]
+            | ((unsigned int)ReceiveBuffer[12] << 8)
+            | ((unsigned int)ReceiveBuffer[13] << 16)
+            | ((unsigned int)ReceiveBuffer[14] << 24);
+        unsigned int losses = (unsigned int)ReceiveBuffer[15]
+            | ((unsigned int)ReceiveBuffer[16] << 8)
+            | ((unsigned int)ReceiveBuffer[17] << 16)
+            | ((unsigned int)ReceiveBuffer[18] << 24);
+        unsigned short rank = (unsigned short)ReceiveBuffer[19]
+            | ((unsigned short)ReceiveBuffer[20] << 8);
+
+        g_pNewUIDuelLadder->SetProfileData(bracket, tier, rating, wins, losses, rank);
+    }
+    else if (op == 2)
+    {
+        // Waiting-to-fight list: [5]=selfListed, [6]=count, then count x 21-byte entries
+        // (name[10]+class[1]+rating[4]+tier[1]+bracket[1]+waitSeconds[4]).
+        if (ReceiveBuffer.size() < 7)
+        {
+            return;
+        }
+
+        BYTE selfListed = ReceiveBuffer[5];
+        BYTE count = ReceiveBuffer[6];
+        if (count > 32)
+        {
+            count = 32;
+        }
+
+        const size_t needed = 7 + (size_t)count * 21;
+        if (ReceiveBuffer.size() < needed)
+        {
+            return;
+        }
+
+        g_pNewUIDuelLadder->SetWaitingData(selfListed, count, ReceiveBuffer.data() + 7, (int)(count * 21));
+    }
+    else if (op == 3)
+    {
+        // Match history: [5]=count, then count x 22-byte entries
+        // (opponent[10]+result[1]+myScore[1]+oppScore[1]+ratingChange[4]+bracket[1]+secondsAgo[4]).
+        if (ReceiveBuffer.size() < 6)
+        {
+            return;
+        }
+
+        BYTE count = ReceiveBuffer[5];
+        if (count > 50)
+        {
+            count = 50;
+        }
+
+        const size_t needed = 6 + (size_t)count * 22;
+        if (ReceiveBuffer.size() < needed)
+        {
+            return;
+        }
+
+        g_pNewUIDuelLadder->SetHistoryData(count, ReceiveBuffer.data() + 6, (int)(count * 22));
+    }
+    else if (op == 4)
+    {
+        // Hall of fame: [5]=count, then count x 26-byte entries
+        // (season[1]+bracket[1]+rank[1]+name[10]+class[1]+rating[4]+wins[4]+losses[4]).
+        if (ReceiveBuffer.size() < 6)
+        {
+            return;
+        }
+
+        BYTE count = ReceiveBuffer[5];
+        if (count > 50)
+        {
+            count = 50;
+        }
+
+        const size_t needed = 6 + (size_t)count * 26;
+        if (ReceiveBuffer.size() < needed)
+        {
+            return;
+        }
+
+        g_pNewUIDuelLadder->SetHallOfFameData(count, ReceiveBuffer.data() + 6, (int)(count * 26));
+    }
+    else if (op == 5)
+    {
+        // Top guild names: [5]=bracket, [6]=count, then count x 10-byte guild names (matched to the
+        // op-0 ranking rows by index). Sent separately so the op-0 packet stays within its length.
+        if (ReceiveBuffer.size() < 7)
+        {
+            return;
+        }
+
+        BYTE count = ReceiveBuffer[6];
+        if (count > 10)
+        {
+            count = 10;
+        }
+
+        const size_t needed = 7 + (size_t)count * 10;
+        if (ReceiveBuffer.size() < needed)
+        {
+            return;
+        }
+
+        g_pNewUIDuelLadder->SetTopGuilds(count, ReceiveBuffer.data() + 7, (int)(count * 10));
+    }
+
+    g_ConsoleDebug->Write(MCD_RECEIVE, L"0xBF [0x32] [ReceiveDuelLadderResponse op=%u]", op);
+}
+
 static void ProcessPacket(const BYTE* ReceiveBuffer, int32_t Size)
 {
     auto received_span = std::span<const BYTE>(ReceiveBuffer, Size);
@@ -14486,6 +14837,15 @@ static void ProcessPacket(const BYTE* ReceiveBuffer, int32_t Size)
 #endif //LJH_ADD_SYSTEM_OF_EQUIPPING_ITEM_FROM_INVENTORY
         case 0x51:
             ReceiveMuHelperStatusUpdate(received_span);
+            break;
+        case 0x32:
+            ReceiveDuelLadderResponse(received_span);
+            break;
+        case 0x31:
+            ReceiveAuctionHousePacket(received_span);
+            break;
+        case 0x30:
+            ReceiveJewelBankBalances(received_span);
             break;
         }
     }

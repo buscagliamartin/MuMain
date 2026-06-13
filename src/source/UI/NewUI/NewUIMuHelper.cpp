@@ -45,7 +45,10 @@ enum ECheckBoxId: uint16_t
     CHECKBOX_ID_DR_ATTACK_CEASE,
     CHECKBOX_ID_DR_ATTACK_AUTO,
     CHECKBOX_ID_DR_ATTACK_TOGETHER,
-    CHECKBOX_ID_FALLBACK_BASIC_ATTACK
+    CHECKBOX_ID_FALLBACK_BASIC_ATTACK,
+    CHECKBOX_ID_ATTACK_MODE_SKILL,
+    CHECKBOX_ID_ATTACK_MODE_BUFFS,
+    CHECKBOX_ID_ATTACK_MODE_BASIC
 };
 
 enum EButtonId : uint16_t
@@ -106,6 +109,10 @@ enum ESkillSlot
 using namespace SEASON3B;
 
 ConfigData _TempConfig;
+
+static const wchar_t* const MUHELPER_MODE_SKILL_TEXT = L"Attack";
+static const wchar_t* const MUHELPER_MODE_BUFFS_TEXT = L"Buff";
+static const wchar_t* const MUHELPER_MODE_BASIC_TEXT = L"Basic Attack";
 
 CNewUIMuHelper::CNewUIMuHelper()
 {
@@ -242,7 +249,6 @@ void CNewUIMuHelper::InitCheckBox()
     InsertCheckBox(IMAGE_CHECKBOX_BTN, m_Pos.x + 94, m_Pos.y + 226, 15, 15, 0, &I18N::Game::Delay, CHECKBOX_ID_SKILL3_DELAY, 0);
     InsertCheckBox(IMAGE_CHECKBOX_BTN, m_Pos.x + 94, m_Pos.y + 243, 15, 15, 0, &I18N::Game::Con, CHECKBOX_ID_SKILL3_CONDITION, 0);
     InsertCheckBox(IMAGE_CHECKBOX_BTN, m_Pos.x + 18, m_Pos.y + 226, 15, 15, 0, &I18N::Game::Combo, CHECKBOX_ID_COMBO, 0);
-    InsertCheckBox(IMAGE_CHECKBOX_BTN, m_Pos.x + 18, m_Pos.y + 266, 15, 15, 0, &I18N::Game::BasicAttackFallback, CHECKBOX_ID_FALLBACK_BASIC_ATTACK, 0);
     InsertCheckBox(IMAGE_CHECKBOX_BTN, m_Pos.x + 18, m_Pos.y + 291, 15, 15, 0, &I18N::Game::BuffDuration, CHECKBOX_ID_BUFF_DURATION, 0);
 
     InsertCheckBox(IMAGE_CHECKBOX_BTN, m_Pos.x + 18, m_Pos.y + 218, 15, 15, 0, &I18N::Game::UseDarkSpirits, CHECKBOX_ID_USE_PET, 0);
@@ -267,8 +273,10 @@ void CNewUIMuHelper::InitCheckBox()
 
     //--
     InsertCheckBox(IMAGE_CHECKBOX_BTN, m_Pos.x + 18, m_Pos.y + 80, 15, 15, 0, &I18N::Game::AutoAcceptFriend, CHECKBOX_ID_AUTO_ACCEPT_FRIEND, 2);
-    InsertCheckBox(IMAGE_CHECKBOX_BTN, m_Pos.x + 18, m_Pos.y + 125, 15, 15, 0, &I18N::Game::PVPCounterattack, CHECKBOX_ID_AUTO_DEFEND, 2);
     InsertCheckBox(IMAGE_CHECKBOX_BTN, m_Pos.x + 18, m_Pos.y + 97, 15, 15, 0, &I18N::Game::AutoAcceptGuildMember, CHECKBOX_ID_AUTO_ACCEPT_GUILD, 2);
+    InsertCheckBox(IMAGE_MACROUI_HELPER_OPTIONBUTTON, m_Pos.x + 18, m_Pos.y + 125, 15, 15, 0, &MUHELPER_MODE_SKILL_TEXT, CHECKBOX_ID_ATTACK_MODE_SKILL, 2);
+    InsertCheckBox(IMAGE_MACROUI_HELPER_OPTIONBUTTON, m_Pos.x + 18, m_Pos.y + 142, 15, 15, 0, &MUHELPER_MODE_BUFFS_TEXT, CHECKBOX_ID_ATTACK_MODE_BUFFS, 2);
+    InsertCheckBox(IMAGE_MACROUI_HELPER_OPTIONBUTTON, m_Pos.x + 18, m_Pos.y + 159, 15, 15, 0, &MUHELPER_MODE_BASIC_TEXT, CHECKBOX_ID_ATTACK_MODE_BASIC, 2);
 
     RegisterBoxCharacter(0xFF, CHECKBOX_ID_POTION);
     RegisterBoxCharacter(0xFF, CHECKBOX_ID_LONG_DISTANCE);
@@ -285,9 +293,10 @@ void CNewUIMuHelper::InitCheckBox()
     RegisterBoxCharacter(0xFF, CHECKBOX_ID_PICK_EXCELLENT);
     RegisterBoxCharacter(0xFF, CHECKBOX_ID_ADD_OTHER_ITEM);
     RegisterBoxCharacter(0xFF, CHECKBOX_ID_AUTO_ACCEPT_FRIEND);
-    RegisterBoxCharacter(0xFF, CHECKBOX_ID_AUTO_DEFEND);
     RegisterBoxCharacter(0xFF, CHECKBOX_ID_AUTO_ACCEPT_GUILD);
-    RegisterBoxCharacter(0xFF, CHECKBOX_ID_FALLBACK_BASIC_ATTACK);
+    RegisterBoxCharacter(0xFF, CHECKBOX_ID_ATTACK_MODE_SKILL);
+    RegisterBoxCharacter(0xFF, CHECKBOX_ID_ATTACK_MODE_BUFFS);
+    RegisterBoxCharacter(0xFF, CHECKBOX_ID_ATTACK_MODE_BASIC);
 
     RegisterBoxCharacter(Dark_Knight, CHECKBOX_ID_SKILL3_DELAY);
     RegisterBoxCharacter(Dark_Knight, CHECKBOX_ID_SKILL3_CONDITION);
@@ -886,12 +895,25 @@ void CNewUIMuHelper::ApplyConfigFromCheckbox(int iCheckboxId, bool bState)
         _TempConfig.bAutoAcceptGuild = bState;
         break;
 
-    case CHECKBOX_ID_AUTO_DEFEND:
-        _TempConfig.bUseSelfDefense = bState;
+    case CHECKBOX_ID_ATTACK_MODE_SKILL:
+        _TempConfig.iAttackMode = ATTACK_MODE_SKILL;
+        m_CheckBoxList[CHECKBOX_ID_ATTACK_MODE_SKILL].box->RegisterBoxState(true);
+        m_CheckBoxList[CHECKBOX_ID_ATTACK_MODE_BUFFS].box->RegisterBoxState(false);
+        m_CheckBoxList[CHECKBOX_ID_ATTACK_MODE_BASIC].box->RegisterBoxState(false);
         break;
 
-    case CHECKBOX_ID_FALLBACK_BASIC_ATTACK:
-        _TempConfig.bFallbackBasicAttack = bState;
+    case CHECKBOX_ID_ATTACK_MODE_BUFFS:
+        _TempConfig.iAttackMode = ATTACK_MODE_BUFFS;
+        m_CheckBoxList[CHECKBOX_ID_ATTACK_MODE_SKILL].box->RegisterBoxState(false);
+        m_CheckBoxList[CHECKBOX_ID_ATTACK_MODE_BUFFS].box->RegisterBoxState(true);
+        m_CheckBoxList[CHECKBOX_ID_ATTACK_MODE_BASIC].box->RegisterBoxState(false);
+        break;
+
+    case CHECKBOX_ID_ATTACK_MODE_BASIC:
+        _TempConfig.iAttackMode = ATTACK_MODE_BASIC;
+        m_CheckBoxList[CHECKBOX_ID_ATTACK_MODE_SKILL].box->RegisterBoxState(false);
+        m_CheckBoxList[CHECKBOX_ID_ATTACK_MODE_BUFFS].box->RegisterBoxState(false);
+        m_CheckBoxList[CHECKBOX_ID_ATTACK_MODE_BASIC].box->RegisterBoxState(true);
         break;
 
     default:
@@ -991,7 +1013,7 @@ void CNewUIMuHelper::Reset()
 
     _TempConfig.iMaxSecondsAway = 10;
     _TempConfig.bLongRangeCounterAttack = false;
-    _TempConfig.bReturnToOriginalPosition = true;
+    _TempConfig.bReturnToOriginalPosition = false;
 
     _TempConfig.aiSkill.fill(0);
     _TempConfig.bUseCombo = false;
@@ -1018,6 +1040,7 @@ void CNewUIMuHelper::Reset()
     _TempConfig.bUseDarkRaven = false;
     _TempConfig.iDarkRavenMode = PET_ATTACK_CEASE;
     _TempConfig.bRepairItem = false;
+    _TempConfig.iAttackMode = ATTACK_MODE_SKILL;
 
     _TempConfig.iObtainingRange = 8;
     _TempConfig.bPickAllItems = false;
@@ -1028,6 +1051,7 @@ void CNewUIMuHelper::Reset()
     _TempConfig.bPickAncient = false;
     _TempConfig.bPickExtraItems = false;
     _TempConfig.aExtraItems.clear();
+    _TempConfig.bFallbackBasicAttack = false;
 
     ApplyConfig();
 }
@@ -1093,8 +1117,9 @@ void CNewUIMuHelper::ApplyConfig()
 
     m_CheckBoxList[CHECKBOX_ID_AUTO_ACCEPT_FRIEND].box->RegisterBoxState(_TempConfig.bAutoAcceptFriend);
     m_CheckBoxList[CHECKBOX_ID_AUTO_ACCEPT_GUILD].box->RegisterBoxState(_TempConfig.bAutoAcceptGuild);
-    m_CheckBoxList[CHECKBOX_ID_AUTO_DEFEND].box->RegisterBoxState(_TempConfig.bUseSelfDefense);
-    m_CheckBoxList[CHECKBOX_ID_FALLBACK_BASIC_ATTACK].box->RegisterBoxState(_TempConfig.bFallbackBasicAttack);
+    m_CheckBoxList[CHECKBOX_ID_ATTACK_MODE_SKILL].box->RegisterBoxState(_TempConfig.iAttackMode == ATTACK_MODE_SKILL);
+    m_CheckBoxList[CHECKBOX_ID_ATTACK_MODE_BUFFS].box->RegisterBoxState(_TempConfig.iAttackMode == ATTACK_MODE_BUFFS);
+    m_CheckBoxList[CHECKBOX_ID_ATTACK_MODE_BASIC].box->RegisterBoxState(_TempConfig.iAttackMode == ATTACK_MODE_BASIC);
 
     m_ItemFilter.Clear();
     for (const auto& item : _TempConfig.aExtraItems)
